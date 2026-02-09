@@ -1,0 +1,457 @@
+services:
+  # ============================================================================
+  # REDIS - Cache pour accélérer les réponses IA (NOUVEAU)
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: ai-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - ${VOLUMES_BASE:-./volumes}/redis:/data
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================================================
+  # LANGFUSE - Observabilité et Analytics pour IA (NOUVEAU)
+  # ============================================================================
+  langfuse-db:
+    image: postgres:15-alpine
+    container_name: langfuse-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=langfuse
+      - POSTGRES_USER=langfuse
+      - POSTGRES_PASSWORD=${LANGFUSE_DB_PASSWORD:-langfuse_secure_password_change_me}
+    volumes:
+      - ${VOLUMES_BASE:-./volumes}/langfuse-db:/var/lib/postgresql/data
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  langfuse:
+    image: langfuse/langfuse:latest
+    container_name: langfuse
+    restart: unless-stopped
+    depends_on:
+      langfuse-db:
+        condition: service_healthy
+    ports:
+      - "${LANGFUSE_PORT:-3002}:3000"
+    environment:
+      - DATABASE_URL=postgresql://langfuse:${LANGFUSE_DB_PASSWORD:-langfuse_secure_password_change_me}@langfuse-db:5432/langfuse
+      - NEXTAUTH_SECRET=${LANGFUSE_NEXTAUTH_SECRET:-langfuse-secret-min-32-chars-change-me}
+      - SALT=${LANGFUSE_SALT:-langfuse-salt-min-32-chars-change-me}
+      - NEXTAUTH_URL=http://localhost:${LANGFUSE_PORT:-3002}
+      - TELEMETRY_ENABLED=false
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/public/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================================================
+  # LITELLM PROXY - Gateway intelligent avec cache et load balancing (NOUVEAU)
+  # ============================================================================
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: litellm-proxy
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - langfuse
+    ports:
+      - "${LITELLM_PORT:-4000}:4000"
+    volumes:
+      - ./litellm/config.yaml:/app/config.yaml:ro
+    networks:
+      - ai-network
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-1234}
+      - LITELLM_LOG=INFO
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
+      - LANGFUSE_HOST=http://langfuse:3000
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "4"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================================================
+  # OLLAMA - LLM local
+  # ============================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ${VOLUMES_BASE:-./volumes}/ollama:/root/.ollama
+    networks:
+      - ai-network
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_NUM_GPU=${OLLAMA_NUM_GPU:-0}
+      - OLLAMA_NUM_CTX=${OLLAMA_NUM_CTX:-4096}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          cpus: '8.0'
+          memory: 16G
+        reservations:
+          cpus: '4.0'
+          memory: 8G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================================================
+  # OLLAMA MODEL LOADER
+  # ============================================================================
+  ollama-loader:
+    image: curlimages/curl:latest
+    container_name: ollama-loader
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - ai-network
+    entrypoint: /bin/sh
+    command: 
+      - -c
+      - |
+        echo "🤖 Téléchargement des modèles Ollama..."
+        
+        pull_model() {
+          MODEL=$1
+          echo "📥 Téléchargement de $MODEL..."
+          if wget -q --spider http://ollama:11434/api/tags 2>/dev/null; then
+            curl -s -X POST http://ollama:11434/api/pull -d "{\"name\":\"$$MODEL\"}" || echo "❌ Échec $MODEL"
+            echo "✅ $MODEL téléchargé"
+          fi
+        }
+        
+        until curl -sf http://ollama:11434/api/tags > /dev/null 2>&1; do
+          echo "⏳ Attente Ollama..."
+          sleep 5
+        done
+        
+        IFS=',' read -ra MODELS <<< "${OLLAMA_MODELS:-codellama,llama3.2}"
+        for model in "$${MODELS[@]}"; do
+          model=$(echo $$model | xargs)
+          pull_model "$$model"
+        done
+        
+        echo "🎉 Modèles téléchargés!"
+    restart: "no"
+
+  # ============================================================================
+  # TABBY - Autocomplétion de code
+  # ============================================================================
+  tabby:
+    image: tabbyml/tabby:latest
+    container_name: tabby
+    restart: unless-stopped
+    command: serve --model ${TABBY_MODEL:-StarCoder-1B} --device ${TABBY_DEVICE:-cpu}
+    ports:
+      - "${TABBY_PORT:-8080}:8080"
+    volumes:
+      - ${VOLUMES_BASE:-./volumes}/tabby:/data
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+        reservations:
+          cpus: '2.0'
+          memory: 4G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================================================
+  # AI GATEWAY - API unifiée pour multiples providers
+  # ============================================================================
+  ai-gateway:
+    build:
+      context: ./ai-gateway
+      dockerfile: Dockerfile
+    container_name: ai-gateway
+    restart: unless-stopped
+    depends_on:
+      - ollama
+      - litellm
+    ports:
+      - "${AI_GATEWAY_PORT:-8000}:8000"
+    volumes:
+      - ./ai-gateway/config.yaml:/app/config.yaml:ro
+    networks:
+      - ai-network
+    environment:
+      - OLLAMA_URL=http://ollama:11434
+      - LITELLM_URL=http://litellm:4000
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY:-}
+      - TOGETHER_API_KEY=${TOGETHER_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================================================
+  # OPEN WEBUI - Interface chat moderne (AMÉLIORÉ)
+  # ============================================================================
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    restart: unless-stopped
+    depends_on:
+      - ollama
+      - litellm
+    ports:
+      - "${WEBUI_PORT:-3000}:8080"
+    volumes:
+      - ${VOLUMES_BASE:-./volumes}/open-webui:/app/backend/data
+    networks:
+      - ai-network
+    environment:
+      # Backend URLs
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OPENAI_API_BASE_URL=http://litellm:4000/v1
+      - OPENAI_API_KEY=${LITELLM_MASTER_KEY:-sk-1234}
+      
+      # Auth
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY:-changeme-secret-key-min-32-chars}
+      - WEBUI_AUTH=${WEBUI_AUTH:-true}
+      
+      # Features
+      - ENABLE_RAG=true
+      - ENABLE_WEB_SEARCH=true
+      - RAG_EMBEDDING_MODEL=nomic-embed-text
+      - CHUNK_SIZE=1000
+      - CHUNK_OVERLAP=100
+      
+      # Langfuse integration
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
+      - LANGFUSE_HOST=http://langfuse:3000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================================================
+  # PERPLEXICA - Recherche web avec IA (NOUVEAU)
+  # ============================================================================
+  perplexica-backend:
+    image: itzcrazykns/perplexica:main
+    container_name: perplexica-backend
+    restart: unless-stopped
+    depends_on:
+      - litellm
+    ports:
+      - "${PERPLEXICA_PORT:-3001}:3001"
+    volumes:
+      - ./perplexica/config.toml:/home/perplexica/config.toml:ro
+    networks:
+      - ai-network
+    environment:
+      - OLLAMA_API_URL=http://ollama:11434
+      - OPENAI_API_URL=http://litellm:4000/v1
+      - OPENAI_API_KEY=${LITELLM_MASTER_KEY:-sk-1234}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    profiles:
+      - perplexica
+
+  # ============================================================================
+  # GOOSE - Agent IA autonome (NOUVEAU)
+  # ============================================================================
+  goose:
+    build:
+      context: ./goose
+      dockerfile: Dockerfile
+    container_name: goose
+    restart: unless-stopped
+    depends_on:
+      - ai-gateway
+      - litellm
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./goose/workspace:/workspace
+      - ./goose/config:/root/.config/goose
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - ai-network
+    environment:
+      - GOOSE_PROVIDER=openai
+      - GOOSE_OPENAI_BASE_URL=http://litellm:4000/v1
+      - GOOSE_OPENAI_API_KEY=${LITELLM_MASTER_KEY:-sk-1234}
+      - GOOSE_MODEL=groq/llama-3.3-70b-versatile
+      - WORKSPACE_DIR=/workspace
+    working_dir: /workspace
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ============================================================================
+# VOLUMES
+# ============================================================================
+volumes:
+  redis-data:
+    driver: local
+  langfuse-db-data:
+    driver: local
+  ollama-data:
+    driver: local
+  tabby-data:
+    driver: local
+  webui-data:
+    driver: local
+
+# ============================================================================
+# NETWORKS
+# ============================================================================
+networks:
+  ai-network:
+    name: ai-network
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.26.0.0/16
