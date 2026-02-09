@@ -1,0 +1,43 @@
+cat > /mnt/user-data/outputs/AI-Ultimate-Stack/.gitignore << 'EOF'
+# Volumes et données
+volumes/
+*.db
+*.sqlite
+
+# Fichiers de configuration locaux
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+goose/workspace/*
+!goose/workspace/.gitkeep
+
+# Système
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker
+.dockerignore
+
+# Backups
+backups/
+*.backup
+*.bak
+
+# Cache
+__pycache__/
+*.pyc
+.cache/
+
+# Langfuse
+langfuse-db/
+EOF
