@@ -2,16 +2,16 @@ name: Déploiement & Tests Forgejo + Woodpecker
 
 on:
   workflow_dispatch:
+    paths:
+      - 'Forgejo-Woodpecker_CI-Stack/**'
+      - '.github/workflows/deploy-and-test-stack.yml'
 
 jobs:
   test-stack:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
-    steps:
-      - name: Working directory
-        working-directory: ./Forgejo-Workpecker_CI-Stack
-        
+    steps:  
       - name: Checkout repository
         uses: actions/checkout@v4
 
