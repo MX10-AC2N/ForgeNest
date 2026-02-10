@@ -90,14 +90,9 @@ router_settings:
   timeout: 120  # secondes
   
   # Fallback si provider échoue
-  fallbacks: 
-    - model: groq/llama-3.3-70b-versatile
-      fallback_models: 
-        - ollama/codellama
-        - ollama/llama3.2
-    - model: groq/llama-3.1-8b-instant
-      fallback_models:
-        - ollama/llama3.2
+  fallbacks:
+    - "groq/llama-3.3-70b-versatile": ["ollama/codellama", "ollama/llama3.2"]
+    - "groq/llama-3.1-8b-instant": ["ollama/llama3.2"]
 
 # =============================================================================
 # CACHE CONFIGURATION - Redis pour performances
