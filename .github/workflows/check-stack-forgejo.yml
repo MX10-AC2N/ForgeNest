@@ -325,13 +325,14 @@ jobs:
           docker compose exec -T forgejo cat /shared/oauth-credentials.env 2>/dev/null || echo "Fichier oauth-credentials.env non trouvé"
         working-directory: ${{ env.COMPOSE_DIR }}
 
-      # -----------------------------------------------------------------
-      # 🧹 Nettoyage (toujours exécuté)
-      # -----------------------------------------------------------------
-      - name: Nettoyage
-        if: always()
-        run: |
-          echo "=== 🧹 Nettoyage ==="
-          docker compose down -v
-          echo "✅ Stack arrêtée et volumes supprimés"
-        working-directory: ${{ env.COMPOSE_DIR }}
+   #  -----------------------------------------------------------------
+   # 🧹 Nettoyage (toujours exécuté)
+   # -----------------------------------------------------------------
+   - name: Nettoyage
+     if: always()
+     run: |
+       echo "=== 🧹 Nettoyage de la stack ==="
+       docker compose down -v --remove-orphans || true
+       docker system prune -f || true
+       echo "✅ Stack arrêtée et volumes supprimés"
+     working-directory: ${{ env.COMPOSE_DIR }}
