@@ -1,0 +1,337 @@
+# Ce workflow est déclenché manuellement (workflow_dispatch).
+# L’input `compose-dir` indique le répertoire contenant le docker‑compose.yml
+# pour la stack Forgejo‑Woodpecker_CI.
+# Toutes les étapes qui utilisent Docker‑Compose utilisent
+# `working-directory: ${{ env.COMPOSE_DIR }}`.
+
+name: Déploiement & Tests Forgejo + Woodpecker
+
+on:
+  workflow_dispatch:
+    inputs:
+      compose-dir:
+        description: "Répertoire contenant le docker‑compose.yml pour la Stack Forgejo‑Woodpecker_CI"
+        required: true
+        default: "./Forgejo-Woodpecker_CI-Stack"   # valeur par défaut
+
+jobs:
+  test-stack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      COMPOSE_DIR: ${{ github.event.inputs.compose-dir }}
+
+    steps:
+      # -----------------------------------------------------------------
+      # 1️⃣ Checkout du dépôt
+      # -----------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------
+      # 2️⃣ Affichage du répertoire choisi (utile pour le debug)
+      # -----------------------------------------------------------------
+      - name: Show chosen compose directory
+        run: echo "Using directory: $COMPOSE_DIR"
+
+      # -----------------------------------------------------------------
+      # 3️⃣ Versions Docker / Docker‑Compose
+      # -----------------------------------------------------------------
+      - name: Afficher les versions
+        run: |
+          echo "Docker version:"
+          docker --version
+          echo "Docker Compose version:"
+          docker compose version
+        working-directory: ${{ env.COMPOSE_DIR }}
+
+      # -----------------------------------------------------------------
+      # 4️⃣ Création du fichier .env
+      # -----------------------------------------------------------------
+      - name: Créer .env pour CI
+        run: |
+          cat <<'EOF' > .env
+          FORGEJO_DOMAIN=localhost
+          FORGEJO_HTTP_PORT=5333
+          FORGEJO_ROOT_URL=http://localhost:5333/
+          FORGEJO_SSH_PORT=5222
+          FORGEJO_INTERNAL_PORT=3000
+          FORGEJO_DB_TYPE=sqlite3
+          FORGEJO_DB_PATH=/data/gitea/forgejo.db
+          FORGEJO_MAILER_ENABLED=false
+          WOODPECKER_VERSION=v2.7.1-alpine
+          WOODPECKER_HOST=http://localhost:5444
+          WOODPECKER_HTTP_PORT=5444
+          WOODPECKER_FORGEJO=true
+          WOODPECKER_FORGEJO_URL=http://forgejo:3000
+          WOODPECKER_OPEN=true
+          WOODPECKER_LOG_LEVEL=debug
+          WOODPECKER_MAX_WORKFLOWS=2
+          WOODPECKER_AGENT_SECRET=ci-test-secret-min-48-chars-DO-NOT-USE-IN-PROD-abc123def456
+          ADMIN_USERNAME=forgejo-admin
+          ADMIN_PASSWORD=TestPassword123!ForCIOnly
+          ADMIN_EMAIL=admin@ci.local
+          ADMIN_FULLNAME=CI Admin
+          WOODPECKER_FORGEJO_CLIENT=
+          WOODPECKER_FORGEJO_SECRET=
+          VOLUMES_BASE=./volumes
+          EOF
+          # Supprimer les espaces éventuels en début de ligne
+          sed -i 's/^[[:space:]]*//' .env
+          echo "=== .env créé ==="
+          cat .env
+        working-directory: ${{ env.COMPOSE_DIR }}
+
+      # -----------------------------------------------------------------
+      # 5️⃣ Build & Up de la stack
+      # -----------------------------------------------------------------
+      - name: Build la stack Docker Compose
+        run: docker compose build --no-cache
+        working-directory: ${{ env.COMPOSE_DIR }}
+
+      - name: Lance la stack Docker Compose
+        run: docker compose up -d
+        working-directory: ${{ env.COMPOSE_DIR }}
+
+      # -----------------------------------------------------------------
+      # 6️⃣ Attente de la santé de Forgejo
+      # -----------------------------------------------------------------
+      - name: Attendre Forgejo healthy (max 10 min)
+        timeout-minutes: 10
+        run: |
+          echo "Attente Forgejo health..."
+          for i in {1..120}; do
+            if curl -sf http://localhost:5333/api/healthz >/dev/null 2>&1; then
+              echo "✅ Forgejo healthy après ${i} tentatives ($(($i * 5))s) !"
+              curl -s http://localhost:5333/api/healthz | jq . || true
+              exit 0
+            fi
+            echo "Tentative $i/120... (sleep 5s)"
+            sleep 5
+          done
+          echo "❌ Timeout Forgejo après 10 minutes"
+          docker compose logs forgejo --tail 200
+          exit 1
+        working-directory: ${{ env.COMPOSE_DIR }}
+
+      # -----------------------------------------------------------------
+      # 7️⃣ Attente de la santé de Woodpecker
+      # -----------------------------------------------------------------
+      - name: Attendre Woodpecker healthy (max 5 min)
+        timeout-minutes: 5
+        run: |
+          echo "Attente Woodpecker health..."
+          for i in {1..60}; do
+            if curl -sf http://localhost:5444/healthz >/dev/null 2>&1; then
+              echo "✅ Woodpecker healthy après ${i} tentatives ($(($i * 5))s) !"
+              exit 0
+            fi
+            echo "Tentative $i/60... (sleep 5s)"
+            sleep 5
+          done
+          echo "❌ Timeout Woodpecker après 5 minutes"
+          docker compose logs woodpecker-server --tail 100
+          exit 1
+        working-directory: ${{ env.COMPOSE_DIR }}
+
+      # -----------------------------------------------------------------
+      # 8️⃣ Attente de la création OAuth dans Forgejo
+      # -----------------------------------------------------------------
+      - name: Attendre la création OAuth dans Forgejo
+        timeout-minutes: 4
+        run: |
+          echo "🔍 Poll des logs Forgejo pour confirmer la création OAuth..."
+          for i in {1..36}; do
+            if docker compose logs forgejo 2>/dev/null | grep -q "first-run-init.sh terminé"; then
+              echo "✅ first-run-init.sh a terminé !"
+              echo ""
+              echo "--- Logs [INIT] et OAuth complets ---"
+              docker compose logs forgejo 2>/dev/null |
+                grep -E "$$INIT$$|WOODPECKER_FORGEJO_CLIENT|WOODPECKER_FORGEJO_SECRET" |
+                tail -20
+              echo "--- fin ---"
+              exit 0
+            fi
+            echo "Attente... ($(($i * 5))s)"
+            sleep 5
+          done
+          echo ""
+          echo "❌ Timeout : first-run-init.sh n'a pas confirmé après 3 min."
+          echo "--- Tous les logs Forgejo (debug) ---"
+          docker compose logs forgejo --tail 100 2>/dev/null || true
+          echo "--- fin ---"
+          exit 1
+        working-directory: ${{ env.COMPOSE_DIR }}
+
+      # -----------------------------------------------------------------
+      # 9️⃣ Configuration OAuth dans Woodpecker
+      # -----------------------------------------------------------------
+      - name: Configurer OAuth dans Woodpecker
+        run: |
+          echo "=== 🔐 Extraction des credentials OAuth depuis les logs ==="
+
+          # Extraction robuste
+          OAUTH_CLIENT=$(docker compose logs forgejo 2>/dev/null |
+            grep -E "^forgejo.*WOODPECKER_FORGEJO_CLIENT=" |
+            tail -n1 |
+            sed 's/.*WOODPECKER_FORGEJO_CLIENT=//' |
+            tr -d '\r\n' | xargs)
+
+          OAUTH_SECRET=$(docker compose logs forgejo 2>/dev/null |
+            grep -E "^forgejo.*WOODPECKER_FORGEJO_SECRET=" |
+            tail -n1 |
+            sed 's/.*WOODPECKER_FORGEJO_SECRET=//' |
+            tr -d '\r\n' | xargs)
+
+          echo "Client ID extrait : ${OAUTH_CLIENT:0:36}"
+          echo "Secret extrait    : ${OAUTH_SECRET:0:24}..."
+
+          # Validation basique
+          if [ -z "$OAUTH_CLIENT" ] || [ -z "$OAUTH_SECRET" ]; then
+            echo "❌ ERREUR : credentials vides après extraction"
+            docker compose logs forgejo 2>/dev/null | grep -i "oauth\|init\|erreur" || true
+            exit 1
+          fi
+
+          # Validation UUID (sans antislashs superflus)
+          if ! echo "$OAUTH_CLIENT" | grep -qE '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'; then
+            echo "⚠️  ATTENTION : Le Client ID ne ressemble pas à un UUID"
+            echo "Valeur : $OAUTH_CLIENT"
+          fi
+
+          # Mise à jour du .env
+          echo "=== 📝 Mise à jour du fichier .env ==="
+          sed -i "s|^WOODPECKER_FORGEJO_CLIENT=.*|WOODPECKER_FORGEJO_CLIENT=$OAUTH_CLIENT|" .env
+          sed -i "s|^WOODPECKER_FORGEJO_SECRET=.*|WOODPECKER_FORGEJO_SECRET=$OAUTH_SECRET|" .env
+          echo "✅ .env mis à jour :"
+          grep "WOODPECKER_FORGEJO_CLIENT\|WOODPECKER_FORGEJO_SECRET" .env
+
+          # Recréer le serveur Woodpecker avec les nouvelles variables
+          echo "=== 🔄 Recréation de Woodpecker Server avec OAuth ==="
+          docker compose up -d --force-recreate woodpecker-server
+
+          # Attente du healthcheck
+          echo "Attente Woodpecker Server health..."
+          for i in {1..30}; do
+            if curl -sf http://localhost:5444/healthz >/dev/null 2>&1; then
+              echo "✅ Woodpecker healthy avec OAuth configuré !"
+              echo "=== Vérification des variables d'environnement dans le conteneur ==="
+              docker compose exec -T woodpecker-server env | grep "WOODPECKER_FORGEJO" || echo "⚠️  Variables non trouvées"
+              exit 0
+            fi
+            echo "Tentative $i/30... (sleep 2s)"
+            sleep 2
+          done
+          echo "❌ Timeout Woodpecker après recréation"
+          docker compose logs woodpecker-server --tail 50
+          exit 1
+        working-directory: ${{ env.COMPOSE_DIR }}
+
+      # -----------------------------------------------------------------
+      # 🔟 Tests de validation de la stack
+      # -----------------------------------------------------------------
+      - name: Tests de validation
+        run: |
+          echo "=== 🧪 Tests de validation de la stack ==="
+          echo ""
+
+          echo "Test 1/5 : Forgejo health"
+          if curl -sf http://localhost:5333/api/healthz >/dev/null; then
+            echo "  ✅ Forgejo OK"
+          else
+            echo "  ❌ Forgejo health check failed"
+            exit 1
+          fi
+
+          echo "Test 2/5 : Woodpecker health"
+          if curl -sf http://localhost:5444/healthz >/dev/null; then
+            echo "  ✅ Woodpecker OK"
+          else
+            echo "  ❌ Woodpecker health check failed"
+            exit 1
+          fi
+
+          echo "Test 3/5 : Woodpecker UI"
+          if curl -sf http://localhost:5444 | grep -q "Woodpecker"; then
+            echo "  ✅ UI Woodpecker OK"
+          else
+            echo "  ❌ UI Woodpecker ne répond pas correctement"
+            exit 1
+          fi
+
+          echo "Test 4/5 : OAuth endpoint (/authorize)"
+          HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost:5444/authorize)
+          echo "  Code HTTP /authorize : $HTTP_CODE"
+          if [ "$HTTP_CODE" -eq 200 ] || [ "$HTTP_CODE" -eq 302 ] || [ "$HTTP_CODE" -eq 303 ] || [ "$HTTP_CODE" -eq 401 ]; then
+            echo "  ✅ OAuth redirect OK (code valide : $HTTP_CODE)"
+          else
+            echo "  ❌ OAuth redirect failed (code inattendu : $HTTP_CODE)"
+            exit 1
+          fi
+
+          echo "Test 5/5 : Variables OAuth dans Woodpecker"
+          CLIENT_IN_CONTAINER=$(docker compose exec -T woodpecker-server env | grep "^WOODPECKER_FORGEJO_CLIENT=" | cut -d= -f2)
+          SECRET_IN_CONTAINER=$(docker compose exec -T woodpecker-server env | grep "^WOODPECKER_FORGEJO_SECRET=" | cut -d= -f2)
+
+          if [ -n "$CLIENT_IN_CONTAINER" ] && [ -n "$SECRET_IN_CONTAINER" ]; then
+            echo "  ✅ Variables OAuth présentes dans le conteneur"
+            echo "     CLIENT : ${CLIENT_IN_CONTAINER:0:36}"
+            echo "     SECRET : ${SECRET_IN_CONTAINER:0:24}..."
+          else
+            echo "  ❌ Variables OAuth manquantes ou vides dans le conteneur"
+            echo "     CLIENT : $CLIENT_IN_CONTAINER"
+            echo "     SECRET : $SECRET_IN_CONTAINER"
+            exit 1
+          fi
+
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✅ TOUS LES TESTS SONT PASSÉS AVEC SUCCÈS !"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        working-directory: ${{ env.COMPOSE_DIR }}
+
+      # -----------------------------------------------------------------
+      # 📋 Logs détaillés en cas d’échec
+      # -----------------------------------------------------------------
+      - name: Logs détaillés (si échec)
+        if: failure()
+        run: |
+          echo "=== 🔍 LOGS FORGEJO ==="
+          docker compose logs forgejo --tail 200 || true
+          echo ""
+
+          echo "=== 🔍 LOGS WOODPECKER‑SERVER ==="
+          docker compose logs woodpecker-server --tail 200 || true
+          echo ""
+
+          echo "=== 🔍 LOGS WOODPECKER‑AGENT ==="
+          docker compose logs woodpecker-agent --tail 200 || true
+          echo ""
+
+          echo "=== 📊 ÉTAT DES CONTENEURS ==="
+          docker compose ps
+          echo ""
+
+          echo "=== 🔐 ENV woodpecker-server (filtré) ==="
+          docker compose exec -T woodpecker-server env | grep -E "WOODPECKER|FORGEJO|ADMIN" | sort || true
+          echo ""
+
+          echo "=== 📄 FICHIER .env (secrets masqués) ==="
+          cat .env | sed 's/$$PASSWORD\|SECRET$$=.*/\1=***/g'
+          echo ""
+
+          echo "=== 📁 CONTENU VOLUME /shared ==="
+          docker compose exec -T forgejo ls -lah /shared/ || true
+          docker compose exec -T forgejo cat /shared/oauth-credentials.env 2>/dev/null || echo "Fichier oauth-credentials.env non trouvé"
+        working-directory: ${{ env.COMPOSE_DIR }}
+
+      # -----------------------------------------------------------------
+      # 🧹 Nettoyage (toujours exécuté)
+      # -----------------------------------------------------------------
+      - name: Nettoyage
+        if: always()
+        run: |
+          echo "=== 🧹 Nettoyage ==="
+          docker compose down -v
+          echo "✅ Stack arrêtée et volumes supprimés"
+        working-directory: ${{ env.COMPOSE_DIR }}
