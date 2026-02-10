@@ -1,22 +1,30 @@
+# Ce workflow est déclenché manuellement (workflow_dispatch).
+# L’input `compose-dir` indique le répertoire contenant le docker‑compose.yml pour la stack Forgejo-Woodpecker_CI
+# Toutes les étapes qui utilisent Docker‑Compose utilisent `working-directory: ${{ env.COMPOSE_DIR }}`.
 name: Déploiement & Tests Forgejo + Woodpecker
 
 on:
   workflow_dispatch:
+    inputs:
+      compose-dir:
+        description: "Répertoire contenant le docker‑compose.yml pour la Stack Forgejo-Woodpecker_CI"
+        required: true
+        default: "./Forgejo-Woodpecker_CI-Stack"   # valeur par défaut
 
 jobs:
   test-stack:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+
+    env:
+      COMPOSE_DIR: ${{ github.event.inputs.compose-dir }}
   
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set working directory for the whole job
-        # Cette étape ne fait rien d’autre que définir le répertoire par défaut
-        # pour les étapes suivantes.
-        run: echo "working-directory set"
-        working-directory: ./Forgejo-Woodpecker_CI-Stack
+      - name: Show chosen compose directory
+        run: echo "Using directory: $COMPOSE_DIR"
 
       - name: Afficher les versions
         run: |
@@ -24,6 +32,7 @@ jobs:
           docker --version
           echo "Docker Compose version:"
           docker compose version
+        working-directory: ${{ env.COMPOSE_DIR }}
 
       - name: Créer .env pour CI
         run: |
@@ -56,12 +65,15 @@ jobs:
           sed -i 's/^[[:space:]]*//' .env
           echo "=== .env créé ==="
           cat .env
+        working-directory: ${{ env.COMPOSE_DIR }}
 
       - name: Build la stack Docker Compose
         run: docker compose build --no-cache
+        working-directory: ${{ env.COMPOSE_DIR }}
 
       - name: Lance la stack Docker Compose
         run: docker compose up -d
+        working-directory: ${{ env.COMPOSE_DIR }}
 
       - name: Attendre Forgejo healthy (max 10 min)
         timeout-minutes: 10
@@ -79,6 +91,7 @@ jobs:
           echo "❌ Timeout Forgejo après 10 minutes"
           docker compose logs forgejo --tail 200
           exit 1
+        working-directory: ${{ env.COMPOSE_DIR }}
 
       - name: Attendre Woodpecker healthy (max 5 min)
         timeout-minutes: 5
@@ -95,6 +108,7 @@ jobs:
           echo "❌ Timeout Woodpecker après 5 minutes"
           docker compose logs woodpecker-server --tail 100
           exit 1
+        working-directory: ${{ env.COMPOSE_DIR }}
 
       - name: Attendre la création OAuth dans Forgejo
         timeout-minutes: 4
@@ -120,6 +134,7 @@ jobs:
           docker compose logs forgejo --tail 100 2>/dev/null || true
           echo "--- fin ---"
           exit 1
+        working-directory: ${{ env.COMPOSE_DIR }}
 
       - name: Configurer OAuth dans Woodpecker
         run: |
@@ -180,6 +195,7 @@ jobs:
           echo "❌ Timeout Woodpecker après recréation"
           docker compose logs woodpecker-server --tail 50
           exit 1
+        working-directory: ${{ env.COMPOSE_DIR }}
 
       - name: Tests de validation
         run: |
@@ -243,6 +259,7 @@ jobs:
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "✅ TOUS LES TESTS SONT PASSÉS AVEC SUCCÈS !"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        working-directory: ${{ env.COMPOSE_DIR }}
 
       - name: Logs détaillés (si échec)
         if: failure()
@@ -282,6 +299,7 @@ jobs:
           echo "=========================================="
           docker compose exec -T forgejo ls -lah /shared/ || true
           docker compose exec -T forgejo cat /shared/oauth-credentials.env 2>/dev/null || echo "Fichier oauth-credentials.env non trouvé"
+        working-directory: ${{ env.COMPOSE_DIR }}
 
       - name: Nettoyage
         if: always()
@@ -289,3 +307,4 @@ jobs:
           echo "=== 🧹 Nettoyage ==="
           docker compose down -v
           echo "✅ Stack arrêtée et volumes supprimés"
+        working-directory: ${{ env.COMPOSE_DIR }}
