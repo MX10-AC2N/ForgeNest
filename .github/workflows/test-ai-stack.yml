@@ -55,18 +55,25 @@ jobs:
           # LiteLLM
           LITELLM_MASTER_KEY=sk-test-1234567890
           
-          # Langfuse
+          # Langfuse - PostgreSQL
           LANGFUSE_DB_PASSWORD=test_password_secure_123
           LANGFUSE_NEXTAUTH_SECRET=test-nextauth-secret-min-32-chars-for-testing
           LANGFUSE_SALT=test-salt-secret-min-32-chars-for-testing
           LANGFUSE_PUBLIC_KEY=
           LANGFUSE_SECRET_KEY=
           
+          # ClickHouse (obligatoire pour Langfuse v3+)
+          CLICKHOUSE_URL=http://clickhouse:8123
+          CLICKHOUSE_MIGRATION_URL=clickhouse://clickhouse:9000?username=default&password=clickhouse_test_pass_123
+          CLICKHOUSE_USER=default
+          CLICKHOUSE_PASSWORD=clickhouse_test_pass_123
+          CLICKHOUSE_DB=langfuse
+          
           # Open WebUI
           WEBUI_SECRET_KEY=test-webui-secret-key-min-32-chars
           WEBUI_AUTH=false
           
-          # Ollama - Modèles légers pour tests
+          # Ollama - Modèle très léger pour CI rapide
           OLLAMA_MODELS=llama3.2:1b
           OLLAMA_NUM_GPU=0
           OLLAMA_NUM_CTX=2048
@@ -81,7 +88,7 @@ jobs:
           # Volumes
           VOLUMES_BASE=./volumes
           
-          # APIs externes (pas nécessaires pour tests)
+          # APIs externes (pas utilisées en test)
           GROQ_API_KEY=
           HUGGINGFACE_API_KEY=
           TOGETHER_API_KEY=
@@ -90,7 +97,6 @@ jobs:
           
           echo "✅ Fichier .env créé"
           cat .env
-
       # ========================================================================
       # 3. BUILD
       # ========================================================================
