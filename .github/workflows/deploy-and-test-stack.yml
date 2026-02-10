@@ -10,10 +10,16 @@ jobs:
   test-stack:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-
-    steps:  
+  
+    steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set working directory for the whole job
+    # Cette étape ne fait rien d’autre que définir le répertoire par défaut
+    # pour les étapes suivantes.
+        run: echo "working-directory set"
+        working-directory: ./Forgejo-Woodpecker_CI-Stack
 
       - name: Afficher les versions
         run: |
