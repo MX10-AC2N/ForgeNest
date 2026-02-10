@@ -170,11 +170,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '8.0'
-          memory: 16G
-        reservations:
           cpus: '4.0'
           memory: 8G
+        reservations:
+          cpus: '3.0'
+          memory: 6G
     logging:
       driver: "json-file"
       options:
