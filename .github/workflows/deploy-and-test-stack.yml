@@ -9,6 +9,9 @@ jobs:
     timeout-minutes: 20
 
     steps:
+      - name: Working directory
+        working-directory: ./Forgejo-Workpecker_CI-Stack
+        
       - name: Checkout repository
         uses: actions/checkout@v4
 
