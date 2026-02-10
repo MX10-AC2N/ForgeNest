@@ -1,6 +1,6 @@
 services:
   # ============================================================================
-  # REDIS - Cache pour accélérer les réponses IA (NOUVEAU)
+  # REDIS - Cache pour accélérer les réponses IA
   # ============================================================================
   redis:
     image: redis:7-alpine
@@ -33,7 +33,45 @@ services:
         max-file: "3"
 
   # ============================================================================
-  # LANGFUSE - Observabilité et Analytics pour IA (NOUVEAU)
+  # CLICKHOUSE - OLAP pour traces & analytics Langfuse (v3+ obligatoire)
+  # ============================================================================
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: ai-clickhouse
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8123:8123"   # HTTP
+      - "127.0.0.1:9000:9000"   # Native (utile debug/migrations)
+    volumes:
+      - ${VOLUMES_BASE:-./volumes}/clickhouse:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - ai-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 768M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================================================
+  # LANGFUSE DB - PostgreSQL pour métadonnées
   # ============================================================================
   langfuse-db:
     image: postgres:15-alpine
@@ -63,12 +101,17 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # ============================================================================
+  # LANGFUSE - Observabilité et Analytics pour IA
+  # ============================================================================
   langfuse:
     image: langfuse/langfuse:latest
     container_name: langfuse
     restart: unless-stopped
     depends_on:
       langfuse-db:
+        condition: service_healthy
+      clickhouse:
         condition: service_healthy
     ports:
       - "${LANGFUSE_PORT:-3002}:3000"
@@ -78,22 +121,27 @@ services:
       - SALT=${LANGFUSE_SALT:-langfuse-salt-min-32-chars-change-me}
       - NEXTAUTH_URL=http://localhost:${LANGFUSE_PORT:-3002}
       - TELEMETRY_ENABLED=false
+      # ClickHouse (obligatoire depuis v3)
+      - CLICKHOUSE_URL=http://clickhouse:8123
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-clickhouse_secure_change_me}
+      - CLICKHOUSE_DB=langfuse
     networks:
       - ai-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/public/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 60s
+      retries: 12          # augmenté pour migrations + clickhouse
+      start_period: 180s   # 3 minutes de grâce au démarrage
     deploy:
       resources:
         limits:
-          cpus: '2.0'
-          memory: 1G
+          cpus: '2.5'
+          memory: 2.5G
         reservations:
-          cpus: '0.5'
-          memory: 256M
+          cpus: '0.8'
+          memory: 1G
     logging:
       driver: "json-file"
       options:
@@ -101,7 +149,7 @@ services:
         max-file: "3"
 
   # ============================================================================
-  # LITELLM PROXY - Gateway intelligent avec cache et load balancing (NOUVEAU)
+  # LITELLM PROXY - Gateway intelligent avec cache et load balancing
   # ============================================================================
   litellm:
     image: ghcr.io/berriai/litellm:main-latest
@@ -202,7 +250,7 @@ services:
           MODEL=$1
           echo "📥 Téléchargement de $MODEL..."
           if wget -q --spider http://ollama:11434/api/tags 2>/dev/null; then
-            curl -s -X POST http://ollama:11434/api/pull -d "{\"name\":\"$$MODEL\"}" || echo "❌ Échec $MODEL"
+            curl -s -X POST http://ollama:11434/api/pull -d "{\"name\":\"$MODEL\"}" || echo "❌ Échec $MODEL"
             echo "✅ $MODEL téléchargé"
           fi
         }
@@ -213,9 +261,9 @@ services:
         done
         
         IFS=',' read -ra MODELS <<< "${OLLAMA_MODELS:-codellama,llama3.2}"
-        for model in "$${MODELS[@]}"; do
-          model=$(echo $$model | xargs)
-          pull_model "$$model"
+        for model in "${MODELS[@]}"; do
+          model=$(echo $model | xargs)
+          pull_model "$model"
         done
         
         echo "🎉 Modèles téléchargés!"
@@ -300,7 +348,7 @@ services:
         max-file: "3"
 
   # ============================================================================
-  # OPEN WEBUI - Interface chat moderne (AMÉLIORÉ)
+  # OPEN WEBUI - Interface chat moderne
   # ============================================================================
   open-webui:
     image: ghcr.io/open-webui/open-webui:main
@@ -316,23 +364,16 @@ services:
     networks:
       - ai-network
     environment:
-      # Backend URLs
       - OLLAMA_BASE_URL=http://ollama:11434
       - OPENAI_API_BASE_URL=http://litellm:4000/v1
       - OPENAI_API_KEY=${LITELLM_MASTER_KEY:-sk-1234}
-      
-      # Auth
       - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY:-changeme-secret-key-min-32-chars}
       - WEBUI_AUTH=${WEBUI_AUTH:-true}
-      
-      # Features
       - ENABLE_RAG=true
       - ENABLE_WEB_SEARCH=true
       - RAG_EMBEDDING_MODEL=nomic-embed-text
       - CHUNK_SIZE=1000
       - CHUNK_OVERLAP=100
-      
-      # Langfuse integration
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
       - LANGFUSE_HOST=http://langfuse:3000
@@ -356,7 +397,7 @@ services:
         max-file: "3"
 
   # ============================================================================
-  # PERPLEXICA - Recherche web avec IA (NOUVEAU)
+  # PERPLEXICA - Recherche web avec IA
   # ============================================================================
   perplexica-backend:
     image: itzcrazykns/perplexica:main
@@ -393,7 +434,7 @@ services:
       - perplexica
 
   # ============================================================================
-  # GOOSE - Agent IA autonome (NOUVEAU)
+  # GOOSE - Agent IA autonome
   # ============================================================================
   goose:
     build:
@@ -443,6 +484,8 @@ volumes:
   tabby-data:
     driver: local
   webui-data:
+    driver: local
+  clickhouse:               # ← ajouté
     driver: local
 
 # ============================================================================
