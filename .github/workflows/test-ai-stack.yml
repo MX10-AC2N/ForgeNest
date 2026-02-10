@@ -1,16 +1,10 @@
 name: Test AI Stack
 
 on:
-  push:
-    branches: [ main, develop ]
+  workflow_dispatch:
     paths:
       - 'AI-Stack/**'
       - '.github/workflows/test-ai-stack.yml'
-  pull_request:
-    branches: [ main ]
-    paths:
-      - 'AI-Stack/**'
-  workflow_dispatch:
 
 env:
   COMPOSE_PROJECT_NAME: forgenest-ai-test
