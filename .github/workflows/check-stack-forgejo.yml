@@ -32,7 +32,8 @@ jobs:
       # 2️⃣ Affichage du répertoire choisi (utile pour le debug)
       # -----------------------------------------------------------------
       - name: Show chosen compose directory
-        run: echo "Using directory: $COMPOSE_DIR"
+        run: |
+          echo "Using directory: $COMPOSE_DIR"
 
       # -----------------------------------------------------------------
       # 3️⃣ Versions Docker / Docker‑Compose
