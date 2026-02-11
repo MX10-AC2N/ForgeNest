@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   # ============================================================================
   # REDIS - Cache pour accélérer les réponses IA
