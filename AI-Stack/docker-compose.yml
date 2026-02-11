@@ -243,33 +243,31 @@ services:
     networks:
       - ai-network
     entrypoint: /bin/sh
-    command: 
-      - -c
-      - |
-        echo "🤖 Téléchargement des modèles Ollama..."
-        
-        pull_model() {
-          MODEL=\[ 1
-          echo "📥 Téléchargement de \]MODEL..."
-          if wget -q --spider http://ollama:11434/api/tags 2>/dev/null; then
-            curl -s -X POST http://ollama:11434/api/pull -d "{\"name\":\"\[ MODEL\"}" || echo "❌ Échec \]MODEL"
-            echo "✅ \[ MODEL téléchargé"
-          fi
-        }
-        
-        until curl -sf http://ollama:11434/api/tags > /dev/null 2>&1; do
-          echo "⏳ Attente Ollama..."
-          sleep 5
-        done
-        
-        IFS=',' read -ra MODELS <<< " \]{OLLAMA_MODELS:-codellama,llama3.2}"
-        for model in "\[ {MODELS[@]}"; do
-          model= \](echo \[ model | xargs)
-          pull_model " \]model"
-        done
-        
-        echo "🎉 Modèles téléchargés!"
-    restart: "no"
+    command:
+  - -c
+  - |
+    echo "🤖 Téléchargement des modèles Ollama..."
+
+    pull_model() {
+      local MODEL="$1"
+      echo "📥 Téléchargement de $MODEL..."
+      curl -s -X POST http://ollama:11434/api/pull -d "{\"name\": \"$MODEL\"}" || echo "❌ Échec $MODEL"
+      echo "✅ $MODEL téléchargé"
+    }
+
+    until curl -sf http://ollama:11434/api/tags > /dev/null 2>&1; do
+      echo "⏳ Attente Ollama..."
+      sleep 5
+    done
+
+    IFS=',' read -ra MODELS <<< "${OLLAMA_MODELS:-codellama,llama3.2}"
+
+    for model in "${MODELS[@]}"; do
+      model=$(echo "$model" | xargs)   # trim espaces
+      pull_model "$model"
+    done
+
+    echo "🎉 Modèles téléchargés!"
   # ============================================================================
   # TABBY - Autocomplétion de code
   # ============================================================================
