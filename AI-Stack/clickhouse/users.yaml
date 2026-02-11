@@ -10,7 +10,7 @@ users:
     networks:
       ip:
         - ::/0          # Toutes les IPv6
-        # - 0.0.0.0/0   # Décommente si tu veux aussi autoriser IPv4
+        - 0.0.0.0/0     # Décommente si tu veux aussi autoriser IPv4
 
     profile: default
     quota: default
