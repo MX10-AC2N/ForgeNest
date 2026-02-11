@@ -249,10 +249,10 @@ services:
         echo "🤖 Téléchargement des modèles Ollama..."
 
         pull_model() {
-          local MODEL="$1"
-          echo "📥 Téléchargement de $MODEL..."
-          curl -s -X POST http://ollama:11434/api/pull -d "{\"name\": \"$MODEL\"}" || echo "❌ Échec $MODEL"
-          echo "✅ $MODEL téléchargé"
+          local MODEL="\[ 1"
+          echo "📥 Téléchargement de \]MODEL..."
+          curl -s -X POST http://ollama:11434/api/pull -d "{\"name\": \"\[ MODEL\"}" || echo "❌ Échec \]MODEL"
+          echo "✅ \[ MODEL téléchargé"
         }
 
         until curl -sf http://ollama:11434/api/tags > /dev/null 2>&1; do
@@ -260,14 +260,15 @@ services:
           sleep 5
         done
 
-        IFS=',' read -ra MODELS <<< "${OLLAMA_MODELS:-codellama,llama3.2}"
+        IFS=',' read -ra MODELS <<< " \]{OLLAMA_MODELS:-codellama,llama3.2}"
 
-        for model in "${MODELS[@]}"; do
-          model=$(echo "$model" | xargs)   # trim espaces
-          pull_model "$model"
+        for model in "\[ {MODELS[@]}"; do
+          model= \](echo "\[ model" | xargs)   # trim espaces
+          pull_model " \]model"
         done
 
         echo "🎉 Modèles téléchargés!"
+    restart: "no"
 
   # ============================================================================
   # TABBY - Autocomplétion de code
