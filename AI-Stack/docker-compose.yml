@@ -126,7 +126,7 @@ services:
       - CLICKHOUSE_URL=http://clickhouse:8123
       - CLICKHOUSE_MIGRATION_URL=clickhouse://clickhouse:9000?username=default&password=${CLICKHOUSE_PASSWORD}
       - CLICKHOUSE_USER=default
-      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-clickhouse_secure_change_me}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-clickhouse_test_pass_123}
       - CLICKHOUSE_DB=langfuse
     networks:
       - ai-network
