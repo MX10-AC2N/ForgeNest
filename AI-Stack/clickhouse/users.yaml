@@ -1,16 +1,22 @@
-# ./clickhouse/users.yaml
-# Converted from users.xml - Password: clickhouse_test_pass_123
-# SHA256: 5beea5a4e0919a4ca9cb2c2c82c1edbbc0427658610791de8262adb709bd6505
-
 users:
   default:
-    # SHA256 hash of "clickhouse_test_pass_123" (echo -n "..." | sha256sum)
     password_sha256_hex: 5beea5a4e0919a4ca9cb2c2c82c1edbbc0427658610791de8262adb709bd6505
 
+    # Réseaux autorisés (IPv6 + IPv4 explicite)
     networks:
       ip:
-        - ::/0          # Toutes les IPv6
-        # - 0.0.0.0/0   # Décommente si tu veux aussi autoriser IPv4
+        - ::/0
+        - 0.0.0.0/0
 
+    # Profil et quota standards
     profile: default
     quota: default
+
+    # Souvent nécessaire pour Langfuse (création de bases, tables, users, RBAC)
+    access_management: 1
+
+    # Optionnel : permet d'utiliser des named collections, utile pour les intégrations modernes
+    named_collection_control: 1
+
+    # Optionnel : limite les requêtes très lourdes (prévention OOM)
+    max_memory_usage: 1000000000   # 1 Go par requête, adapte selon ton host
