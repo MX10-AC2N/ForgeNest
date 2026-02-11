@@ -1,3 +1,19 @@
+# ./clickhouse/users.yaml
+# Converted from users.xml - Password: clickhouse_test_pass_123
+# SHA256: 5beea5a4e0919a4ca9cb2c2c82c1edbbc0427658610791de8262adb709bd6505
+
+users:
+  default:
+    # SHA256 hash of "clickhouse_test_pass_123" (echo -n "..." | sha256sum)
+    password_sha256_hex: 5beea5a4e0919a4ca9cb2c2c82c1edbbc0427658610791de8262adb709bd6505
+
+    networks:
+      ip:
+        - ::/0          # Toutes les IPv6
+        # - 0.0.0.0/0   # Décommente si tu veux aussi autoriser IPv4
+
+    profile: default
+    quota: default
 users:
   default:
     password_sha256_hex: 5beea5a4e0919a4ca9cb2c2c82c1edbbc0427658610791de8262adb709bd6505
