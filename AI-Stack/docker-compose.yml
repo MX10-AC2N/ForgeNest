@@ -484,8 +484,6 @@ volumes:
     driver: local
   webui-data:
     driver: local
-  clickhouse:               # ← ajouté
-    driver: local
 
 # ============================================================================
 # NETWORKS
