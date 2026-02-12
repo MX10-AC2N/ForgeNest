@@ -126,7 +126,7 @@ jobs:
           wait_for_service() {
             SERVICE=$1
             URL=$2
-            MAX_ATTEMPTS=180
+            MAX_ATTEMPTS=300
             ATTEMPT=0
             
             echo "Attente de $SERVICE..."
