@@ -46,6 +46,8 @@ jobs:
           # Ports
           LITELLM_PORT=4000
           LANGFUSE_PORT=3002
+          CLICKHOUSE_PORT=8123
+          CLICKHOUSE_MIGRATION_PORT=9000
           WEBUI_PORT=3000
           PERPLEXICA_PORT=3001
           AI_GATEWAY_PORT=8000
