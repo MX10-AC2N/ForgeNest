@@ -124,10 +124,11 @@ services:
       - TELEMETRY_ENABLED=false
       # ClickHouse (obligatoire depuis v3)
       - CLICKHOUSE_URL=http://clickhouse:8123
-      - CLICKHOUSE_MIGRATION_URL=clickhouse://clickhouse:9000?username=default&password=${CLICKHOUSE_PASSWORD}
+      - CLICKHOUSE_MIGRATION_URL=clickhouse://clickhouse:9000?username=default&password=&database=langfuse&x-multi-statement=true
       - CLICKHOUSE_USER=default
-      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-clickhouse_test_pass_123}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
       - CLICKHOUSE_DB=langfuse
+      - CLICKHOUSE_CLUSTER_ENABLED=false
     networks:
       - ai-network
     healthcheck:
