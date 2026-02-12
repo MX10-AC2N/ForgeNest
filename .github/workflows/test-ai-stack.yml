@@ -630,6 +630,9 @@ jobs:
           echo "--- Langfuse ---"
           docker compose logs langfuse --tail 50
           echo ""
+          echo "--- ClickHouse ---"
+          docker compose logs ai-clickhouse --tail 50
+          écho ""
           echo "--- Ollama ---"
           docker compose logs ollama --tail 50
           echo ""
