@@ -101,6 +101,24 @@ jobs:
           echo "✅ Fichier .env créé"
           cat .env
       # ========================================================================
+      # 2.5. NETTOYAGE PRÉ-DÉMARRAGE (CRUCIAL pour migrations propres)
+      # ========================================================================
+      - name: 🧹 Nettoyage pré-démarrage
+        working-directory: AI-Stack
+        run: |
+          echo "=== 🧹 Nettoyage des volumes et containers précédents ==="
+          
+          # Arrêter et supprimer tout (volumes inclus)
+          docker compose down -v 2>/dev/null || true
+          
+          # Supprimer explicitement le dossier volumes s'il existe
+          sudo rm -rf volumes 2>/dev/null || true
+          
+          # Créer les dossiers volumes propres
+          mkdir -p volumes/{redis,clickhouse,langfuse-db,ollama,open-webui,tabby}
+          
+          echo "✅ Environnement nettoyé - démarrage propre garanti"
+      # ========================================================================
       # 3. BUILD
       # ========================================================================
       - name: 🔨 Build des images Docker
