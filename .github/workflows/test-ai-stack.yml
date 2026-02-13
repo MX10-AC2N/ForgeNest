@@ -66,9 +66,9 @@ jobs:
           
           # ClickHouse (obligatoire pour Langfuse v3+)
           CLICKHOUSE_URL=http://clickhouse:8123
-          CLICKHOUSE_MIGRATION_URL=clickhouse://clickhouse:9000?username=default&password=&database=langfuse&x-multi-statement=true
+          CLICKHOUSE_MIGRATION_URL=clickhouse://clickhouse:9000?username=default&password=clickhouse_test_pass&database=langfuse&x-multi-statement=true
           CLICKHOUSE_USER=default
-          CLICKHOUSE_PASSWORD=
+          CLICKHOUSE_PASSWORD=clickhouse_test_pass
           CLICKHOUSE_DB=langfuse
           CLICKHOUSE_CLUSTER_ENABLED=false
           
@@ -117,7 +117,7 @@ jobs:
         working-directory: AI-Stack
         run: |
           echo "=== 🚀 Démarrage des services core ==="
-          docker compose up -d redis langfuse-db langfuse ollama litellm ai-gateway
+          docker compose up -d redis clickhouse langfuse-db langfuse ollama litellm ai-gateway
           echo "✅ Services core démarrés"
           
       - name: ⏳ Attendre que les services core soient prêts
@@ -151,6 +151,9 @@ jobs:
           echo "Test Redis..."
           docker compose exec -T redis redis-cli ping || exit 1
           echo "  ✅ Redis OK"
+          
+          # Attendre ClickHouse
+          wait_for_service "ClickHouse" "http://localhost:8123/ping" || exit 1
           
           # Attendre Langfuse DB
           sleep 10
@@ -635,7 +638,7 @@ jobs:
           echo ""
           echo "--- ClickHouse ---"
           docker compose logs ai-clickhouse --tail 50
-          écho ""
+          echo ""
           echo "--- Ollama ---"
           docker compose logs ollama --tail 50
           echo ""
