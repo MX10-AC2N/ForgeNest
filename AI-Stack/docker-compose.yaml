@@ -39,7 +39,7 @@ services:
     image: clickhouse/clickhouse-server:latest
     container_name: ai-clickhouse
     restart: unless-stopped
-    user: "101:101"
+    # user: "101:101"
     environment:
       # Configuration du mot de passe pour l'utilisateur default
       - CLICKHOUSE_USER=default
