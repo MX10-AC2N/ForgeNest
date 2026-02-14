@@ -2,9 +2,6 @@ name: Test AI Stack
 
 on:
   workflow_dispatch:
-    paths:
-      - 'AI-Stack/**'
-      - '.github/workflows/test-ai-stack.yml'
 
 env:
   COMPOSE_PROJECT_NAME: forgenest-ai-test
