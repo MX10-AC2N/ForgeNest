@@ -169,6 +169,7 @@ jobs:
           
           # Attendre ClickHouse
           wait_for_service "ClickHouse" "http://localhost:8123/ping" || exit 1
+          wait_for_service "ClickHouse native" "http://localhost:9000/ping" || exit 1   # ou mieux : utiliser clickhouse-client ping
           
           # Attendre Langfuse DB
           sleep 10
