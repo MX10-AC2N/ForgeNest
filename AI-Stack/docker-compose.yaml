@@ -111,7 +111,7 @@ services:
   # LANGFUSE - Observabilité et Analytics pour IA
   # ============================================================================
   langfuse:
-    image: langfuse/langfuse:latest
+    image: langfuse/langfuse:3
     container_name: langfuse
     restart: unless-stopped
     depends_on:
