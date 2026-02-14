@@ -192,6 +192,27 @@ jobs:
           echo "✅ Tous les services core sont prêts !"
 
       # ========================================================================
+      # 4.5 APPLIQUÉ MIGRATIONS CLICKHOUSE
+      # ========================================================================
+      - name: 🔧 Appliquer migrations ClickHouse manuellement
+        working-directory: AI-Stack
+        run: |
+          echo "=== 🔧 Migration ClickHouse manuelle ==="
+          
+          # On attend un peu plus longtemps pour être sûr
+          sleep 20
+          
+          docker compose exec -T langfuse \
+            /bin/sh -c "
+              cd /app/packages/shared/clickhouse/migrations/clustered &&
+              migrate -path . \
+                -database \"${CLICKHOUSE_MIGRATION_URL}\" \
+                up
+            "
+          
+          echo "✅ Migrations ClickHouse appliquées"
+
+      # ========================================================================
       # 5. TÉLÉCHARGEMENT MODÈLE OLLAMA
       # ========================================================================
       - name: 📥 Télécharger modèle Ollama
