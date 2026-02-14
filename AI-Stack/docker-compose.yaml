@@ -36,7 +36,7 @@ services:
   # CLICKHOUSE - OLAP pour traces & analytics Langfuse (v3+ obligatoire)
   # ============================================================================
   clickhouse:
-    image: clickhouse/clickhouse-server:latest
+    image: clickhouse/clickhouse-server:lts-alpine
     container_name: ai-clickhouse
     restart: unless-stopped
     # user: "101:101"
@@ -50,7 +50,6 @@ services:
       - "127.0.0.1:9000:9000"   # Native (utile debug/migrations)
     volumes:
       - ${VOLUMES_BASE:-./volumes}/clickhouse:/var/lib/clickhouse
-      #  - ./clickhouse/users.yaml:/etc/clickhouse-server/users.d/users.yaml:ro
     ulimits:
       nofile:
         soft: 262144
