@@ -60,6 +60,7 @@ jobs:
           LANGFUSE_SALT=test-salt-secret-min-32-chars-for-testing
           LANGFUSE_PUBLIC_KEY=
           LANGFUSE_SECRET_KEY=
+          LANGFUSE_AUTO_CLICKHOUSE_MIGRATION_DISABLED=true
           
           # ClickHouse (obligatoire pour Langfuse v3+)
           CLICKHOUSE_URL=http://clickhouse:8123
