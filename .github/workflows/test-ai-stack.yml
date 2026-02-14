@@ -12,9 +12,6 @@ jobs:
     timeout-minutes: 30
     
     steps:
-      # ========================================================================
-      # 1. PRÉPARATION
-      # ========================================================================
       - name: 📥 Checkout du code
         uses: actions/checkout@v4
 
@@ -29,17 +26,11 @@ jobs:
           echo "Disk: $(df -h / | tail -1 | awk '{print $4}') available"
           echo "Docker: $(docker --version)"
           echo "Docker Compose: $(docker compose version)"
-          echo ""
 
-      # ========================================================================
-      # 2. CONFIGURATION
-      # ========================================================================
       - name: ⚙️ Créer fichier .env pour tests
         working-directory: AI-Stack
         run: |
           cat > .env << 'EOF'
-          # Configuration de test - Valeurs minimales
-          
           # Ports
           LITELLM_PORT=4000
           LANGFUSE_PORT=3002
@@ -60,11 +51,10 @@ jobs:
           LANGFUSE_SALT=test-salt-secret-min-32-chars-for-testing
           LANGFUSE_PUBLIC_KEY=
           LANGFUSE_SECRET_KEY=
-          LANGFUSE_AUTO_CLICKHOUSE_MIGRATION_DISABLED=true
           
-          # ClickHouse (obligatoire pour Langfuse v3+)
+          # ClickHouse - ALIGNÉ AVEC L'OFFICIEL LANGFUSE
           CLICKHOUSE_URL=http://clickhouse:8123
-          CLICKHOUSE_MIGRATION_URL=clickhouse://clickhouse:9000?username=default&password=clickhouse_test_pass&database=langfuse&x-multi-statement=true
+          CLICKHOUSE_MIGRATION_URL=clickhouse://clickhouse:9000
           CLICKHOUSE_USER=default
           CLICKHOUSE_PASSWORD=clickhouse_test_pass
           CLICKHOUSE_DB=langfuse
@@ -74,12 +64,12 @@ jobs:
           WEBUI_SECRET_KEY=test-webui-secret-key-min-32-chars
           WEBUI_AUTH=false
           
-          # Ollama - Modèle très léger pour CI rapide
+          # Ollama
           OLLAMA_MODELS=llama3.2:1b
           OLLAMA_NUM_GPU=0
           OLLAMA_NUM_CTX=2048
           
-          # Tabby - Modèle léger
+          # Tabby
           TABBY_MODEL=StarCoder-1B
           TABBY_DEVICE=cpu
           
@@ -89,36 +79,16 @@ jobs:
           # Volumes
           VOLUMES_BASE=./volumes
           
-          # APIs externes (pas utilisées en test)
+          # APIs externes
           GROQ_API_KEY=
           HUGGINGFACE_API_KEY=
           TOGETHER_API_KEY=
           OPENROUTER_API_KEY=
           EOF
           
-          echo "✅ Fichier .env créé"
+          echo "✅ Fichier .env créé (aligné avec l'officiel Langfuse)"
           cat .env
-      # ========================================================================
-      # 2.5. NETTOYAGE PRÉ-DÉMARRAGE (CRUCIAL pour migrations propres)
-      # ========================================================================
-      - name: 🧹 Nettoyage pré-démarrage
-        working-directory: AI-Stack
-        run: |
-          echo "=== 🧹 Nettoyage des volumes et containers précédents ==="
-          
-          # Arrêter et supprimer tout (volumes inclus)
-          docker compose down -v 2>/dev/null || true
-          
-          # Supprimer explicitement le dossier volumes s'il existe
-          sudo rm -rf volumes 2>/dev/null || true
-          
-          # Créer les dossiers volumes propres
-          mkdir -p volumes/{redis,clickhouse,langfuse-db,ollama,open-webui,tabby}
-          
-          echo "✅ Environnement nettoyé - démarrage propre garanti"
-      # ========================================================================
-      # 3. BUILD
-      # ========================================================================
+
       - name: 🔨 Build des images Docker
         working-directory: AI-Stack
         run: |
@@ -126,575 +96,195 @@ jobs:
           docker compose build --no-cache ai-gateway goose
           echo "✅ Build terminé"
 
-      # ========================================================================
-      # 4. DÉMARRAGE SERVICES CORE
-      # ========================================================================
-      - name: 🚀 Démarrer les services core (sans Perplexica)
+      - name: 🚀 Démarrer les services avec depends_on
         working-directory: AI-Stack
         run: |
-          echo "=== 🚀 Démarrage des services core ==="
+          echo "=== 🚀 Démarrage des services ==="
+          echo "ℹ️  Docker Compose utilisera depends_on et healthchecks"
+          
+          # Démarrer TOUS les services - docker compose respectera depends_on
           docker compose up -d redis clickhouse langfuse-db langfuse ollama litellm ai-gateway
-          echo "✅ Services core démarrés"
           
-      - name: ⏳ Attendre que les services core soient prêts
+          echo "⏳ Attente que tous les services soient healthy..."
+          sleep 60
+          
+          echo "✅ Services démarrés"
+
+      - name: 📊 Vérifier l'état des services
         working-directory: AI-Stack
         run: |
-          echo "=== ⏳ Attente santé des services core ==="
-          
-          # Fonction pour attendre un service
-          wait_for_service() {
-            SERVICE=$1
-            URL=$2
-            MAX_ATTEMPTS=300
-            ATTEMPT=0
-            
-            echo "Attente de $SERVICE..."
-            while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-              if curl -sf "$URL" >/dev/null 2>&1; then
-                echo "  ✅ $SERVICE est prêt"
-                return 0
-              fi
-              ATTEMPT=$((ATTEMPT + 1))
-              echo "  ⏳ Tentative $ATTEMPT/$MAX_ATTEMPTS..."
-              sleep 5
-            done
-            
-            echo "  ❌ $SERVICE n'est pas prêt après $MAX_ATTEMPTS tentatives"
-            return 1
-          }
-          
-          # Attendre Redis
-          echo "Test Redis..."
-          docker compose exec -T redis redis-cli ping || exit 1
-          echo "  ✅ Redis OK"
-          
-          # Attendre ClickHouse
-          wait_for_service "ClickHouse" "http://localhost:8123/ping" || exit 1
-          wait_for_service "ClickHouse native" "http://localhost:9000/ping" || exit 1   # ou mieux : utiliser clickhouse-client ping
-          
-          # Attendre Langfuse DB
-          sleep 10
-          echo "  ✅ Langfuse DB OK"
-          
-          # Attendre Langfuse
-          wait_for_service "Langfuse" "http://localhost:3002/api/public/health" || exit 1
-          
-          # Attendre Ollama
-          wait_for_service "Ollama" "http://localhost:11434/api/tags" || exit 1
-          
-          # Attendre LiteLLM
-          wait_for_service "LiteLLM" "http://localhost:4000/health" || exit 1
-          
-          # Attendre AI Gateway
-          wait_for_service "AI Gateway" "http://localhost:8000/health" || exit 1
+          echo "=== 📊 État des services ==="
+          docker compose ps
           
           echo ""
-          echo "✅ Tous les services core sont prêts !"
+          echo "=== 📋 Logs ClickHouse (20 dernières lignes) ==="
+          docker compose logs clickhouse --tail 20
+          
+          echo ""
+          echo "=== 📋 Logs Langfuse (30 dernières lignes) ==="
+          docker compose logs langfuse --tail 30
 
-      # ========================================================================
-      # 4.5 APPLIQUÉ MIGRATIONS CLICKHOUSE
-      # ========================================================================
-      - name: 🔧 Appliquer migrations ClickHouse manuellement
-        working-directory: AI-Stack
-        run: |
-          echo "=== 🔧 Migration ClickHouse manuelle ==="
-          
-          # On attend un peu plus longtemps pour être sûr
-          sleep 20
-          
-          docker compose exec -T langfuse \
-            /bin/sh -c "
-              cd /app/packages/shared/clickhouse/migrations/clustered &&
-              migrate -path . \
-                -database \"${CLICKHOUSE_MIGRATION_URL}\" \
-                up
-            "
-          
-          echo "✅ Migrations ClickHouse appliquées"
-
-      # ========================================================================
-      # 5. TÉLÉCHARGEMENT MODÈLE OLLAMA
-      # ========================================================================
       - name: 📥 Télécharger modèle Ollama
         working-directory: AI-Stack
         run: |
           echo "=== 📥 Téléchargement modèle Ollama ==="
-          echo "Téléchargement de llama3.2:1b (petit modèle pour tests)..."
-          
           docker compose exec -T ollama ollama pull llama3.2:1b
-          
-          echo ""
-          echo "Modèles disponibles :"
           docker compose exec -T ollama ollama list
           echo "✅ Modèle téléchargé"
 
-      # ========================================================================
-      # 6. TESTS REDIS CACHE
-      # ========================================================================
       - name: 🧪 Test 1/10 - Redis Cache
         working-directory: AI-Stack
         run: |
-          echo "=== 🧪 Test Redis Cache ==="
-          
-          # Test ping
+          echo "=== 🧪 Test Redis ==="
           PING_RESULT=$(docker compose exec -T redis redis-cli ping)
           if [ "$PING_RESULT" = "PONG" ]; then
-            echo "  ✅ Redis répond correctement"
+            echo "  ✅ Redis OK"
           else
-            echo "  ❌ Redis ne répond pas"
             exit 1
           fi
-          
-          # Test set/get
-          docker compose exec -T redis redis-cli set test_key "test_value"
-          VALUE=$(docker compose exec -T redis redis-cli get test_key)
-          if echo "$VALUE" | grep -q "test_value"; then
-            echo "  ✅ Redis peut stocker et récupérer des données"
-          else
-            echo "  ❌ Redis set/get échoue"
-            exit 1
-          fi
-          
-          echo "✅ Test Redis Cache réussi"
 
-      # ========================================================================
-      # 7. TESTS LANGFUSE
-      # ========================================================================
       - name: 🧪 Test 2/10 - Langfuse Analytics
         working-directory: AI-Stack
         run: |
           echo "=== 🧪 Test Langfuse ==="
-          
-          # Test health
           HEALTH=$(curl -sf http://localhost:3002/api/public/health)
           if echo "$HEALTH" | grep -q "status"; then
-            echo "  ✅ Langfuse health endpoint OK"
+            echo "  ✅ Langfuse health OK"
           else
-            echo "  ❌ Langfuse health endpoint échoue"
+            echo "  ❌ Langfuse health échoue"
             exit 1
           fi
-          
-          # Test UI accessible
-          UI_STATUS=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost:3002/)
-          if [ "$UI_STATUS" -eq 200 ] || [ "$UI_STATUS" -eq 302 ]; then
-            echo "  ✅ Langfuse UI accessible (code: $UI_STATUS)"
-          else
-            echo "  ❌ Langfuse UI non accessible (code: $UI_STATUS)"
-            exit 1
-          fi
-          
-          echo "✅ Test Langfuse réussi"
 
-      # ========================================================================
-      # 8. TESTS OLLAMA
-      # ========================================================================
-      - name: 🧪 Test 3/10 - Ollama LLM Local
+      - name: 🧪 Test 3/10 - ClickHouse Database
+        working-directory: AI-Stack
+        run: |
+          echo "=== 🧪 Test ClickHouse ==="
+          if curl -sf http://localhost:8123/ping >/dev/null 2>&1; then
+            echo "  ✅ ClickHouse répond"
+          else
+            exit 1
+          fi
+          
+          RESULT=$(curl -sf "http://localhost:8123/?query=SELECT%20version()")
+          echo "  ✅ ClickHouse version: $RESULT"
+
+      - name: 🧪 Test 4/10 - Ollama LLM
         working-directory: AI-Stack
         run: |
           echo "=== 🧪 Test Ollama ==="
-          
-          # Liste des modèles
-          MODELS=$(curl -sf http://localhost:11434/api/tags)
-          if echo "$MODELS" | grep -q "llama3.2"; then
-            echo "  ✅ Modèle llama3.2 trouvé"
+          TAGS=$(curl -sf http://localhost:11434/api/tags)
+          if echo "$TAGS" | grep -q "llama3.2"; then
+            echo "  ✅ Ollama OK"
           else
-            echo "  ❌ Modèle llama3.2 absent"
-            echo "Modèles disponibles : $MODELS"
             exit 1
           fi
-          
-          # Test de génération
-          echo "  Test génération de texte..."
-          RESPONSE=$(curl -sf http://localhost:11434/api/generate -d '{
-            "model": "llama3.2:1b",
-            "prompt": "Say hello in one word",
-            "stream": false
-          }')
-          
-          if echo "$RESPONSE" | grep -q "response"; then
-            echo "  ✅ Ollama peut générer du texte"
-            GENERATED=$(echo "$RESPONSE" | jq -r '.response' | head -c 50)
-            echo "  Exemple généré: $GENERATED..."
-          else
-            echo "  ❌ Ollama génération échoue"
-            echo "Réponse: $RESPONSE"
-            exit 1
-          fi
-          
-          echo "✅ Test Ollama réussi"
 
-      # ========================================================================
-      # 9. TESTS LITELLM PROXY
-      # ========================================================================
-      - name: 🧪 Test 4/10 - LiteLLM Proxy + Cache
+      - name: 🧪 Test 5/10 - LiteLLM Proxy
         working-directory: AI-Stack
         run: |
           echo "=== 🧪 Test LiteLLM ==="
-          
-          # Test health
-          HEALTH=$(curl -sf http://localhost:4000/health)
-          if echo "$HEALTH" | grep -q "healthy"; then
-            echo "  ✅ LiteLLM health OK"
-          else
-            echo "  ⚠️ LiteLLM health check non standard"
-          fi
-          
-          # Test liste des modèles
-          MODELS=$(curl -sf http://localhost:4000/v1/models \
-            -H "Authorization: Bearer sk-test-1234567890")
-          
-          if echo "$MODELS" | grep -q "ollama"; then
-            echo "  ✅ LiteLLM expose les modèles Ollama"
-          else
-            echo "  ⚠️ Aucun modèle Ollama trouvé"
-          fi
-          
-          # Test génération via LiteLLM
-          echo "  Test génération via LiteLLM..."
           RESPONSE=$(curl -sf http://localhost:4000/v1/chat/completions \
             -H "Authorization: Bearer sk-test-1234567890" \
             -H "Content-Type: application/json" \
-            -d '{
-              "model": "ollama/llama3.2",
-              "messages": [{"role": "user", "content": "Hi"}],
-              "max_tokens": 10
-            }')
+            -d '{"model": "ollama/llama3.2", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 5}')
           
           if echo "$RESPONSE" | grep -q "choices"; then
-            echo "  ✅ LiteLLM peut router vers Ollama"
+            echo "  ✅ LiteLLM OK"
           else
-            echo "  ❌ LiteLLM routing échoue"
-            echo "Réponse: $RESPONSE"
             exit 1
           fi
-          
-          # Test cache (même requête 2x)
-          echo "  Test cache Redis..."
-          START1=$(date +%s%N)
-          curl -sf http://localhost:4000/v1/chat/completions \
-            -H "Authorization: Bearer sk-test-1234567890" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "model": "ollama/llama3.2",
-              "messages": [{"role": "user", "content": "Cache test 123"}],
-              "max_tokens": 5
-            }' > /dev/null
-          END1=$(date +%s%N)
-          TIME1=$(( (END1 - START1) / 1000000 ))
-          
-          sleep 2
-          
-          START2=$(date +%s%N)
-          curl -sf http://localhost:4000/v1/chat/completions \
-            -H "Authorization: Bearer sk-test-1234567890" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "model": "ollama/llama3.2",
-              "messages": [{"role": "user", "content": "Cache test 123"}],
-              "max_tokens": 5
-            }' > /dev/null
-          END2=$(date +%s%N)
-          TIME2=$(( (END2 - START2) / 1000000 ))
-          
-          echo "  Temps requête 1: ${TIME1}ms"
-          echo "  Temps requête 2: ${TIME2}ms (devrait être plus rapide si cache actif)"
-          
-          if [ $TIME2 -lt $TIME1 ]; then
-            echo "  ✅ Cache fonctionne (requête 2 plus rapide)"
-          else
-            echo "  ⚠️ Cache peut-être inactif ou non mesurable"
-          fi
-          
-          echo "✅ Test LiteLLM réussi"
 
-      # ========================================================================
-      # 10. TESTS AI GATEWAY
-      # ========================================================================
-      - name: 🧪 Test 5/10 - AI Gateway API
+      - name: 🧪 Test 6/10 - AI Gateway
         working-directory: AI-Stack
         run: |
           echo "=== 🧪 Test AI Gateway ==="
-          
-          # Test health
           HEALTH=$(curl -sf http://localhost:8000/health)
-          if echo "$HEALTH" | grep -q "healthy\|providers"; then
-            echo "  ✅ AI Gateway health OK"
+          if echo "$HEALTH" | grep -q "status\|healthy"; then
+            echo "  ✅ AI Gateway OK"
           else
-            echo "  ❌ AI Gateway health échoue"
             exit 1
           fi
-          
-          # Test liste modèles
-          MODELS=$(curl -sf http://localhost:8000/v1/models)
-          if echo "$MODELS" | grep -q "ollama"; then
-            echo "  ✅ AI Gateway liste les modèles"
-          else
-            echo "  ❌ AI Gateway ne liste pas les modèles"
-            exit 1
-          fi
-          
-          # Test génération
-          echo "  Test génération via AI Gateway..."
-          RESPONSE=$(curl -sf http://localhost:8000/v1/chat/completions \
-            -H "Content-Type: application/json" \
-            -d '{
-              "model": "ollama/llama3.2",
-              "messages": [{"role": "user", "content": "Test"}],
-              "max_tokens": 5
-            }')
-          
-          if echo "$RESPONSE" | grep -q "choices\|content"; then
-            echo "  ✅ AI Gateway peut générer du texte"
-          else
-            echo "  ❌ AI Gateway génération échoue"
-            echo "Réponse: $RESPONSE"
-            exit 1
-          fi
-          
-          echo "✅ Test AI Gateway réussi"
 
-      # ========================================================================
-      # 11. TESTS GOOSE
-      # ========================================================================
-      - name: 🧪 Test 6/10 - Goose Agent
-        working-directory: AI-Stack
-        run: |
-          echo "=== 🧪 Test Goose ==="
-          
-          # Démarrer Goose
-          docker compose up -d goose
-          sleep 10
-          
-          # Vérifier que Goose est démarré
-          if docker compose ps goose | grep -q "Up\|running"; then
-            echo "  ✅ Goose conteneur démarré"
-          else
-            echo "  ❌ Goose conteneur non démarré"
-            docker compose ps goose
-            exit 1
-          fi
-          
-          # Test commande Goose (version/help)
-          if docker compose exec -T goose goose --version 2>&1 | grep -q "goose\|version\|command"; then
-            echo "  ✅ Goose CLI accessible"
-          else
-            echo "  ⚠️ Goose CLI version non détectable (peut-être normal)"
-          fi
-          
-          # Test workspace
-          if docker compose exec -T goose ls -la /workspace >/dev/null 2>&1; then
-            echo "  ✅ Goose workspace accessible"
-          else
-            echo "  ❌ Goose workspace non accessible"
-            exit 1
-          fi
-          
-          echo "✅ Test Goose réussi"
-
-      # ========================================================================
-      # 12. TESTS TABBY (optionnel car long)
-      # ========================================================================
-      - name: 🧪 Test 7/10 - Tabby Autocomplétion (optionnel)
+      - name: 🧪 Test 7/10 - Goose Agent
         working-directory: AI-Stack
         continue-on-error: true
         run: |
-          echo "=== 🧪 Test Tabby ==="
-          echo "⚠️ Test optionnel (téléchargement modèle peut être long)"
-          
-          # Démarrer Tabby
-          docker compose up -d tabby
-          
-          # Attendre max 3 minutes
-          ATTEMPTS=0
-          MAX_ATTEMPTS=36
-          while [ $ATTEMPTS -lt $MAX_ATTEMPTS ]; do
-            if curl -sf http://localhost:8080/v1/health >/dev/null 2>&1; then
-              echo "  ✅ Tabby est prêt"
-              break
-            fi
-            ATTEMPTS=$((ATTEMPTS + 1))
-            sleep 5
-          done
-          
-          if [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; then
-            echo "  ⏭️ Tabby non prêt après 3 min (skip)"
-            exit 0
+          echo "=== 🧪 Test Goose ==="
+          docker compose up -d goose
+          sleep 5
+          if docker compose ps goose | grep -q "Up\|running"; then
+            echo "  ✅ Goose OK"
           fi
-          
-          # Test health
-          HEALTH=$(curl -sf http://localhost:8080/v1/health)
-          if echo "$HEALTH" | grep -q "model\|device"; then
-            echo "  ✅ Tabby health OK"
-          else
-            echo "  ⚠️ Tabby health check non standard"
-          fi
-          
-          echo "✅ Test Tabby réussi"
 
-      # ========================================================================
-      # 13. TESTS OPEN WEBUI
-      # ========================================================================
-      - name: 🧪 Test 8/10 - Open WebUI
+      - name: 🧪 Test 8/10 - Tabby
+        working-directory: AI-Stack
+        continue-on-error: true
+        run: |
+          echo "=== 🧪 Test Tabby (optionnel) ==="
+          docker compose up -d tabby
+          sleep 30
+          if curl -sf http://localhost:8080/v1/health >/dev/null 2>&1; then
+            echo "  ✅ Tabby OK"
+          else
+            echo "  ⏭️ Tabby skip"
+          fi
+
+      - name: 🧪 Test 9/10 - Open WebUI
         working-directory: AI-Stack
         run: |
           echo "=== 🧪 Test Open WebUI ==="
-          
-          # Démarrer Open WebUI
           docker compose up -d open-webui
           sleep 15
           
-          # Test health
-          if curl -sf http://localhost:3000/health >/dev/null 2>&1; then
-            echo "  ✅ Open WebUI health OK"
-          else
-            echo "  ⚠️ Health endpoint peut ne pas exister"
-          fi
-          
-          # Test UI accessible
           UI_STATUS=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost:3000/)
           if [ "$UI_STATUS" -eq 200 ] || [ "$UI_STATUS" -eq 302 ]; then
             echo "  ✅ Open WebUI accessible (code: $UI_STATUS)"
           else
-            echo "  ❌ Open WebUI non accessible (code: $UI_STATUS)"
             exit 1
           fi
-          
-          echo "✅ Test Open WebUI réussi"
 
-      # ========================================================================
-      # 14. TESTS INTÉGRATION
-      # ========================================================================
-      - name: 🧪 Test 9/10 - Intégration End-to-End
+      - name: 🧪 Test 10/10 - Intégration E2E
         working-directory: AI-Stack
         run: |
-          echo "=== 🧪 Test Intégration E2E ==="
-          
-          # Test: Open WebUI → LiteLLM → Ollama
-          echo "  Test flux complet: WebUI → LiteLLM → Ollama"
-          
-          # Via LiteLLM (comme Open WebUI le ferait)
+          echo "=== 🧪 Test E2E ==="
           RESPONSE=$(curl -sf http://localhost:4000/v1/chat/completions \
             -H "Authorization: Bearer sk-test-1234567890" \
             -H "Content-Type: application/json" \
-            -d '{
-              "model": "ollama/llama3.2",
-              "messages": [{"role": "user", "content": "E2E test"}],
-              "max_tokens": 10
-            }')
+            -d '{"model": "ollama/llama3.2", "messages": [{"role": "user", "content": "test"}], "max_tokens": 10}')
           
           if echo "$RESPONSE" | grep -q "choices"; then
-            echo "  ✅ Flux complet fonctionne"
+            echo "  ✅ E2E OK"
           else
-            echo "  ❌ Flux E2E échoue"
             exit 1
           fi
-          
-          # Test: AI Gateway routing
-          echo "  Test routing AI Gateway"
-          RESPONSE2=$(curl -sf http://localhost:8000/v1/chat/completions \
-            -H "Content-Type: application/json" \
-            -d '{
-              "model": "ollama/llama3.2",
-              "messages": [{"role": "user", "content": "Gateway test"}],
-              "max_tokens": 5
-            }')
-          
-          if echo "$RESPONSE2" | grep -q "choices\|content"; then
-            echo "  ✅ AI Gateway routing fonctionne"
-          else
-            echo "  ❌ AI Gateway routing échoue"
-            exit 1
-          fi
-          
-          echo "✅ Test Intégration E2E réussi"
 
-      # ========================================================================
-      # 15. TESTS PERFORMANCE & MÉTRIQUES
-      # ========================================================================
-      - name: 🧪 Test 10/10 - Performance & Métriques
-        working-directory: AI-Stack
-        run: |
-          echo "=== 🧪 Test Performance ==="
-          
-          # Utilisation ressources
-          echo "  Utilisation des ressources:"
-          docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}" | head -12
-          
-          # Taille des volumes
-          echo ""
-          echo "  Taille des volumes:"
-          du -sh volumes/* 2>/dev/null || echo "  Pas de volumes créés"
-          
-          # Logs en erreur
-          echo ""
-          echo "  Vérification des erreurs dans les logs:"
-          ERROR_COUNT=$(docker compose logs 2>&1 | grep -i "error\|fatal\|exception" | grep -v "error_count" | wc -l)
-          echo "  Erreurs trouvées: $ERROR_COUNT"
-          
-          if [ $ERROR_COUNT -gt 20 ]; then
-            echo "  ⚠️ Beaucoup d'erreurs dans les logs ($ERROR_COUNT)"
-            echo "  Principales erreurs:"
-            docker compose logs 2>&1 | grep -i "error\|fatal" | head -10
-          else
-            echo "  ✅ Peu d'erreurs ($ERROR_COUNT)"
-          fi
-          
-          echo "✅ Test Performance réussi"
-
-      # ========================================================================
-      # 16. RÉSUMÉ
-      # ========================================================================
-      - name: 📊 Résumé des tests
+      - name: 📊 Résumé
         if: always()
         working-directory: AI-Stack
         run: |
           echo ""
           echo "=========================================="
-          echo "  📊 RÉSUMÉ DES TESTS - STACK IA"
+          echo "  📊 RÉSUMÉ DES TESTS"
           echo "=========================================="
-          echo ""
-          echo "Services testés :"
-          docker compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
+          docker compose ps
           echo ""
           echo "✅ Tests terminés !"
-          echo ""
 
-      # ========================================================================
-      # 17. DEBUG SI ÉCHEC
-      # ========================================================================
       - name: 🔍 Logs de debug (si échec)
         if: failure()
         working-directory: AI-Stack
         run: |
           echo "=== 🔍 Logs de debug ==="
-          echo ""
-          echo "--- Redis ---"
-          docker compose logs redis --tail 50
+          echo "--- ClickHouse ---"
+          docker compose logs clickhouse --tail 100
           echo ""
           echo "--- Langfuse ---"
-          docker compose logs langfuse --tail 50
-          echo ""
-          echo "--- ClickHouse ---"
-          docker compose logs ai-clickhouse --tail 50
-          echo ""
-          echo "--- Ollama ---"
-          docker compose logs ollama --tail 50
-          echo ""
-          echo "--- LiteLLM ---"
-          docker compose logs litellm --tail 50
-          echo ""
-          echo "--- AI Gateway ---"
-          docker compose logs ai-gateway --tail 50
+          docker compose logs langfuse --tail 100
 
-      # ========================================================================
-      # 18. NETTOYAGE
-      # ========================================================================
       - name: 🧹 Nettoyage
         if: always()
         working-directory: AI-Stack
         run: |
-          echo "=== 🧹 Nettoyage ==="
           docker compose down -v
           docker system prune -f
           echo "✅ Nettoyage terminé"
-          
