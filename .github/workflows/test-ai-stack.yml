@@ -49,6 +49,7 @@ jobs:
           LANGFUSE_DB_PASSWORD=test_password_secure_123
           LANGFUSE_NEXTAUTH_SECRET=test-nextauth-secret-min-32-chars-for-testing
           LANGFUSE_SALT=test-salt-secret-min-32-chars-for-testing
+          LANGFUSE_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000
           LANGFUSE_PUBLIC_KEY=
           LANGFUSE_SECRET_KEY=
           
