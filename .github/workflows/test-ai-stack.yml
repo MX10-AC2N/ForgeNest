@@ -173,13 +173,21 @@ jobs:
         run: |
           echo "=== 🧪 Test ClickHouse ==="
           if curl -sf http://localhost:8123/ping >/dev/null 2>&1; then
-            echo "  ✅ ClickHouse répond"
+            echo "  ✅ ClickHouse répond au ping"
           else
+            echo "  ❌ ClickHouse ping échoue"
             exit 1
           fi
-          
-          RESULT=$(curl -sf "http://localhost:8123/?query=SELECT%20version()")
-          echo "  ✅ ClickHouse version: $RESULT"
+    
+    # Ajout du password via query param (format standard HTTP ClickHouse)
+          RESULT=\( (curl -sf "http://localhost:8123/?query=SELECT%20version()&user=default&password= \){CLICKHOUSE_PASSWORD:-clickhouse_test_pass}")
+    
+          if [ -n "$RESULT" ]; then
+            echo "  ✅ ClickHouse version: $RESULT"
+          else
+            echo "  ❌ Impossible de récupérer la version"
+            exit 1
+          fi
 
       - name: 🧪 Test 4/10 - Ollama LLM
         working-directory: AI-Stack
