@@ -293,12 +293,8 @@ services:
       - OLLAMA_HOST=0.0.0.0
       - OLLAMA_NUM_GPU=${OLLAMA_NUM_GPU:-0}
       - OLLAMA_NUM_CTX=${OLLAMA_NUM_CTX:-4096}
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
+    # Pas de healthcheck - curl n'est pas disponible dans l'image ollama/ollama
+    # Le workflow testera la disponibilité directement depuis l'hôte
     deploy:
       resources:
         limits:
@@ -321,7 +317,7 @@ services:
     container_name: ollama-loader
     depends_on:
       ollama:
-        condition: service_healthy
+        condition: service_started  # Ollama n'a pas de healthcheck
     networks:
       - ai-network
     entrypoint: /bin/sh
@@ -441,8 +437,10 @@ services:
     container_name: open-webui
     restart: unless-stopped
     depends_on:
-      - ollama
-      - litellm
+      ollama:
+        condition: service_started
+      litellm:
+        condition: service_started
     ports:
       - "${WEBUI_PORT:-3000}:8080"
     volumes:
