@@ -123,12 +123,22 @@ jobs:
         run: |
           echo "Attente healthchecks (max 8 min global, 10 min pour langfuse)..."
           
-          # Services rapides
-          for service in redis minio clickhouse langfuse-db ollama litellm; do
+          # Services rapides (infrastructure)
+          for service in redis minio clickhouse langfuse-db; do
             echo "→ Vérification $service"
             timeout 180s sh -c "until docker compose ps $service | grep -q '(healthy)'; do sleep 5; done" || {
               echo "❌ Timeout sur $service"
               docker compose logs $service --tail 50
+              exit 1
+            }
+          done
+          
+          # Services AI (démarrage plus lent)
+          for service in ollama litellm ai-gateway; do
+            echo "→ Vérification $service (tolérance extra pour démarrage AI)"
+            timeout 300s sh -c "until docker compose ps $service | grep -q '(healthy)'; do sleep 10; done" || {
+              echo "❌ Timeout sur $service après 5 min"
+              docker compose logs $service --tail 100
               exit 1
             }
           done
@@ -211,6 +221,12 @@ jobs:
           docker compose up -d goose
           sleep 8
           docker compose ps goose | grep -q "Up" && echo "✅ Goose running" || echo "⚠️ Goose non démarré (optionnel)"
+
+      - name: 🧪 Test 8/10 - MinIO S3
+        working-directory: AI-Stack
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:9001/minio/health/live)
+          [[ "$STATUS" -eq 200 ]] && echo "✅ MinIO OK (code $STATUS)" || exit 1
 
       - name: 🧪 Test 9/10 - Open WebUI
         working-directory: AI-Stack
