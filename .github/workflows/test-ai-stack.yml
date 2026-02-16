@@ -133,11 +133,30 @@ jobs:
             }
           done
           
+          # Ollama - teste via API car pas de healthcheck (curl absent de l'image)
+          echo "→ Vérification ollama (via API)"
+          timeout 300s sh -c '
+            until docker compose ps ollama | grep -q "Up"; do 
+              echo "  Attente démarrage container ollama..."
+              sleep 5
+            done
+            echo "  Container démarré, test API..."
+            until curl -sf http://localhost:11434/ > /dev/null; do 
+              echo "  Attente API ollama..."
+              sleep 5
+            done
+            echo "  ✅ Ollama API répond"
+          ' || {
+            echo "❌ Timeout sur ollama après 5 min"
+            docker compose logs ollama --tail 100
+            exit 1
+          }
+          
           # Services AI (démarrage plus lent)
-          for service in ollama litellm ai-gateway; do
+          for service in litellm ai-gateway; do
             echo "→ Vérification $service (tolérance extra pour démarrage AI)"
-            timeout 480s sh -c "until docker compose ps $service | grep -q '(healthy)'; do sleep 10; done" || {
-              echo "❌ Timeout sur $service après 8 min"
+            timeout 300s sh -c "until docker compose ps $service | grep -q '(healthy)'; do sleep 10; done" || {
+              echo "❌ Timeout sur $service après 5 min"
               docker compose logs $service --tail 100
               exit 1
             }
