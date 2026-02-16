@@ -136,8 +136,8 @@ jobs:
           # Services AI (démarrage plus lent)
           for service in ollama litellm ai-gateway; do
             echo "→ Vérification $service (tolérance extra pour démarrage AI)"
-            timeout 300s sh -c "until docker compose ps $service | grep -q '(healthy)'; do sleep 10; done" || {
-              echo "❌ Timeout sur $service après 5 min"
+            timeout 480s sh -c "until docker compose ps $service | grep -q '(healthy)'; do sleep 10; done" || {
+              echo "❌ Timeout sur $service après 8 min"
               docker compose logs $service --tail 100
               exit 1
             }
