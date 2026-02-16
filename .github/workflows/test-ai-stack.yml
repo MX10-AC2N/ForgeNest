@@ -64,6 +64,15 @@ jobs:
           # Redis (pour Langfuse v3)
           REDIS_AUTH=
           
+          # MinIO S3 (pour Langfuse v3 - obligatoire)
+          MINIO_ROOT_USER=langfuse
+          MINIO_ROOT_PASSWORD=langfuse_minio_password
+          LANGFUSE_S3_BUCKET=langfuse
+          LANGFUSE_S3_ACCESS_KEY=langfuse
+          LANGFUSE_S3_SECRET_KEY=langfuse_minio_password
+          LANGFUSE_S3_REGION=us-east-1
+          LANGFUSE_S3_ENDPOINT=http://minio:9000
+          
           # Open WebUI
           WEBUI_SECRET_KEY=test-webui-secret-key-min-32-chars
           WEBUI_AUTH=false
@@ -107,7 +116,7 @@ jobs:
           echo "ℹ️  Docker Compose utilisera depends_on et healthchecks"
           
           # Démarrer TOUS les services - docker compose respectera depends_on
-          docker compose up -d redis clickhouse langfuse-db langfuse ollama litellm ai-gateway
+          docker compose up -d redis minio minio-init clickhouse langfuse-db langfuse ollama litellm ai-gateway
           
           echo "⏳ Attente que tous les services soient healthy..."
           sleep 60
