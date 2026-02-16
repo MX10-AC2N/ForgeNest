@@ -197,6 +197,7 @@ services:
       # Redis (obligatoire pour v3)
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - REDIS_CONNECTION_STRING=redis://redis:6379/0
       - REDIS_AUTH=
       # S3/MinIO (obligatoire pour v3 - stockage des événements)
       - LANGFUSE_S3_EVENT_UPLOAD_ENABLED=true
