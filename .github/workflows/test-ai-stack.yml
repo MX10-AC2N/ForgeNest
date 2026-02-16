@@ -121,16 +121,29 @@ jobs:
       - name: ⏳ Attendre que les services soient healthy
         working-directory: AI-Stack
         run: |
-          echo "Attente healthchecks (max 4 minutes)..."
-          for service in redis minio clickhouse langfuse-db langfuse ollama litellm; do
+          echo "Attente healthchecks (max 8 min global, 10 min pour langfuse)..."
+          
+          # Services rapides
+          for service in redis minio clickhouse langfuse-db ollama litellm; do
             echo "→ Vérification $service"
-            timeout 240s sh -c "until docker compose ps $service | grep -q '(healthy)'; do sleep 5; done" || {
+            timeout 180s sh -c "until docker compose ps $service | grep -q '(healthy)'; do sleep 5; done" || {
               echo "❌ Timeout sur $service"
-              docker compose logs $service --tail 30
+              docker compose logs $service --tail 50
               exit 1
             }
           done
-          echo "✅ Tous les services de base sont healthy"
+          
+          # Langfuse : plus patient (migrations longues)
+          echo "→ Vérification langfuse (tolérance extra pour migrations ClickHouse/Postgres)"
+          timeout 600s sh -c "until docker compose ps langfuse | grep -q '(healthy)'; do sleep 10; done" || {
+            echo "❌ Timeout sur langfuse après 10 min"
+            docker compose logs langfuse --tail 100
+            echo "=== Logs ClickHouse (dernières lignes) ==="
+            docker compose logs clickhouse --tail 50
+            exit 1
+          done
+          
+          echo "✅ Tous les services healthy"
 
       - name: 📊 État des containers
         working-directory: AI-Stack
