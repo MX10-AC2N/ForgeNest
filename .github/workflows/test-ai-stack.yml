@@ -152,15 +152,32 @@ jobs:
             exit 1
           }
           
-          # Services AI (démarrage plus lent)
-          for service in litellm ai-gateway; do
-            echo "→ Vérification $service (tolérance extra pour démarrage AI)"
-            timeout 300s sh -c "until docker compose ps $service | grep -q '(healthy)'; do sleep 10; done" || {
-              echo "❌ Timeout sur $service après 5 min"
-              docker compose logs $service --tail 100
-              exit 1
-            }
-          done
+          # LiteLLM - teste via API (pas de healthcheck fiable)
+          echo "→ Vérification litellm (via API)"
+          timeout 300s sh -c '
+            until docker compose ps litellm | grep -q "Up"; do 
+              echo "  Attente démarrage container litellm..."
+              sleep 5
+            done
+            echo "  Container démarré, test API..."
+            until curl -sf http://localhost:4000/health > /dev/null; do 
+              echo "  Attente API litellm..."
+              sleep 5
+            done
+            echo "  ✅ LiteLLM API répond"
+          ' || {
+            echo "❌ Timeout sur litellm après 5 min"
+            docker compose logs litellm --tail 100
+            exit 1
+          }
+          
+          # AI Gateway
+          echo "→ Vérification ai-gateway (tolérance extra pour démarrage AI)"
+          timeout 300s sh -c "until docker compose ps ai-gateway | grep -q '(healthy)'; do sleep 10; done" || {
+            echo "❌ Timeout sur ai-gateway après 5 min"
+            docker compose logs ai-gateway --tail 100
+            exit 1
+          }
           
           # Langfuse : plus patient (migrations longues)
           echo "→ Vérification langfuse (tolérance extra pour migrations ClickHouse/Postgres)"
