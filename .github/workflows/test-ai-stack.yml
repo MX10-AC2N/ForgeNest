@@ -61,6 +61,9 @@ jobs:
           CLICKHOUSE_DB=langfuse
           CLICKHOUSE_CLUSTER_ENABLED=false
           
+          # Redis (pour Langfuse v3)
+          REDIS_AUTH=
+          
           # Open WebUI
           WEBUI_SECRET_KEY=test-webui-secret-key-min-32-chars
           WEBUI_AUTH=false
