@@ -237,8 +237,10 @@ services:
     container_name: litellm-proxy
     restart: unless-stopped
     depends_on:
-      - redis
-      - langfuse
+      redis:
+        condition: service_healthy
+      langfuse:
+        condition: service_started  # Changé de healthy à started
     ports:
       - "${LITELLM_PORT:-4000}:4000"
     volumes:
@@ -292,11 +294,11 @@ services:
       - OLLAMA_NUM_GPU=${OLLAMA_NUM_GPU:-0}
       - OLLAMA_NUM_CTX=${OLLAMA_NUM_CTX:-4096}
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      test: ["CMD", "curl", "-f", "http://localhost:11434"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 120s
+      start_period: 60s
     deploy:
       resources:
         limits:
@@ -394,8 +396,10 @@ services:
     container_name: ai-gateway
     restart: unless-stopped
     depends_on:
-      - ollama
-      - litellm
+      ollama:
+        condition: service_started
+      litellm:
+        condition: service_started
     ports:
       - "${AI_GATEWAY_PORT:-8000}:8000"
     volumes:
