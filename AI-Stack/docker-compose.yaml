@@ -33,6 +33,61 @@ services:
         max-file: "3"
 
   # ============================================================================
+  # MINIO - Stockage S3 compatible pour Langfuse v3 (obligatoire)
+  # ============================================================================
+  minio:
+    image: minio/minio:latest
+    container_name: ai-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "127.0.0.1:9000:9000"   # API S3
+      - "127.0.0.1:9001:9001"   # Console Web
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-langfuse}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-langfuse_minio_password}
+    volumes:
+      - ${VOLUMES_BASE:-./volumes}/minio:/data
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # MinIO init - Crée le bucket langfuse au démarrage
+  minio-init:
+    image: minio/mc:latest
+    container_name: ai-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER:-langfuse} ${MINIO_ROOT_PASSWORD:-langfuse_minio_password};
+      mc mb --ignore-existing myminio/${LANGFUSE_S3_BUCKET:-langfuse};
+      mc anonymous set download myminio/${LANGFUSE_S3_BUCKET:-langfuse};
+      exit 0;
+      "
+    networks:
+      - ai-network
+
+  # ============================================================================
   # CLICKHOUSE - OLAP pour traces & analytics Langfuse (v3+ obligatoire)
   # ============================================================================
   clickhouse:
@@ -119,6 +174,10 @@ services:
         condition: service_healthy
       clickhouse:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     ports:
       - "${LANGFUSE_PORT:-3002}:3000"
     environment:
@@ -139,6 +198,14 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_AUTH=${REDIS_AUTH:-}
+      # S3/MinIO (obligatoire pour v3 - stockage des événements)
+      - LANGFUSE_S3_EVENT_UPLOAD_ENABLED=true
+      - LANGFUSE_S3_EVENT_UPLOAD_BUCKET=${LANGFUSE_S3_BUCKET:-langfuse}
+      - LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID=${LANGFUSE_S3_ACCESS_KEY:-langfuse}
+      - LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY=${LANGFUSE_S3_SECRET_KEY:-langfuse_minio_password}
+      - LANGFUSE_S3_EVENT_UPLOAD_REGION=${LANGFUSE_S3_REGION:-us-east-1}
+      - LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT=${LANGFUSE_S3_ENDPOINT:-http://minio:9000}
+      - LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE=true
     networks:
       - ai-network
     healthcheck:
