@@ -1,6 +1,6 @@
 # ⚠️ 🛠️ Work In Progress 🛠️ ⚠️
 
-# ForgeNest
+# ==> ForgeNest <==
 **The Autonomous Dev Nest – Code, Cache, Conquer** 🚀
 [![Déploiement & Tests Forgejo + Woodpecker](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/check-stack-forgejo.yml/badge.svg)](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/check-stack-forgejo.yml)
 [![Test AI Stack](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/test-ai-stack.yml/badge.svg)](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/test-ai-stack.yml)
