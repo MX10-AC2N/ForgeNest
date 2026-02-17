@@ -2,6 +2,8 @@
 
 # ForgeNest
 **The Autonomous Dev Nest – Code, Cache, Conquer** 🚀
+[![Test Interactivité 2 Stacks](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/test-interactivity.yml/badge.svg)](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/test-interactivity.yml)
+
 
 Votre forge de développement privée, autonome et ultra-performante :  
 - Forgejo + Woodpecker CI (self-hosted Git & pipelines)  
