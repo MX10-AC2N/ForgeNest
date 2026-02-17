@@ -190,7 +190,7 @@ jobs:
             done
             echo "  Container démarré, attente que le serveur réponde..."
             until STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3002/api/public/health) && \
-                  [[ "$STATUS" =~ ^(200|401)$ ]]; do 
+                  { [ "$STATUS" = "200" ] || [ "$STATUS" = "401" ]; }; do 
               echo "  Attente API langfuse (status: ${STATUS:-no response})..."
               sleep 10
             done
