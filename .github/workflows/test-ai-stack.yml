@@ -152,7 +152,7 @@ jobs:
             exit 1
           }
           
-          # LiteLLM - teste via API (pas de healthcheck fiable)
+          # LiteLLM - teste via API avec authentification (le /health requiert une API key)
           echo "→ Vérification litellm (via API)"
           timeout 300s sh -c '
             until docker compose ps litellm | grep -q "Up"; do 
@@ -162,7 +162,7 @@ jobs:
             echo "  Container démarré, test API..."
             until curl -sf -o /dev/null \
               -H "Authorization: Bearer sk-test-1234567890" \
-              http://localhost:4000/health; do
+              http://localhost:4000/health; do 
               echo "  Attente API litellm..."
               sleep 5
             done
@@ -189,7 +189,7 @@ jobs:
             echo "=== Logs ClickHouse (dernières lignes) ==="
             docker compose logs clickhouse --tail 50
             exit 1
-          done
+          }
           
           echo "✅ Tous les services healthy"
 
