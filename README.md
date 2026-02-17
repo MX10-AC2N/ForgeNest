@@ -2,7 +2,11 @@
 
 # ForgeNest
 **The Autonomous Dev Nest – Code, Cache, Conquer** 🚀
-[![Test Interactivité 2 Stacks](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/test-interactivity.yml/badge.svg)](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/test-interactivity.yml)
+# [![Déploiement & Tests Forgejo + Woodpecker](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/check-stack-forgejo.yml/badge.svg)](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/check-stack-forgejo.yml)
+
+# [![Test AI Stack](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/test-ai-stack.yml/badge.svg)](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/test-ai-stack.yml)
+
+# [![Test Interactivité 2 Stacks](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/test-interactivity.yml/badge.svg)](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/test-interactivity.yml)
 
 
 Votre forge de développement privée, autonome et ultra-performante :  
