@@ -181,13 +181,23 @@ jobs:
             exit 1
           }
           
-          # Langfuse : plus patient (migrations longues)
-          echo "→ Vérification langfuse (tolérance extra pour migrations ClickHouse/Postgres)"
-          timeout 600s sh -c "until docker compose ps langfuse | grep -q '(healthy)'; do sleep 10; done" || {
-            echo "❌ Timeout sur langfuse après 10 min"
-            docker compose logs langfuse --tail 100
-            echo "=== Logs ClickHouse (dernières lignes) ==="
-            docker compose logs clickhouse --tail 50
+          # Langfuse - teste via API depuis l'hôte (migrations longues ~8-10 min)
+          echo "→ Vérification langfuse (via API, patience pour migrations...)"
+          timeout 720s sh -c '
+            until docker compose ps langfuse | grep -q "Up"; do 
+              echo "  Attente démarrage container langfuse..."
+              sleep 10
+            done
+            echo "  Container démarré, attente que le serveur réponde..."
+            until STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3002/api/public/health) && \
+                  [[ "$STATUS" =~ ^(200|401)$ ]]; do 
+              echo "  Attente API langfuse (status: ${STATUS:-no response})..."
+              sleep 10
+            done
+            echo "  ✅ Langfuse répond (HTTP $STATUS)"
+          ' || {
+            echo "❌ Timeout sur langfuse après 12 min"
+            docker compose logs langfuse --tail 50
             exit 1
           }
           
