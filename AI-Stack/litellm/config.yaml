@@ -39,9 +39,9 @@ model_list:
       model: ollama/codellama
       api_base: http://ollama:11434
 
-  - model_name: ollama/llama3.2
+  - model_name: ollama/llama3.2:1b
     litellm_params:
-      model: ollama/llama3.2
+      model: ollama/llama3.2:1b
       api_base: http://ollama:11434
 
   - model_name: ollama/deepseek-coder
@@ -91,8 +91,8 @@ router_settings:
   
   # Fallback si provider échoue
   fallbacks:
-    - "groq/llama-3.3-70b-versatile": ["ollama/codellama", "ollama/llama3.2"]
-    - "groq/llama-3.1-8b-instant": ["ollama/llama3.2"]
+    - "groq/llama-3.3-70b-versatile": ["ollama/codellama", "ollama/llama3.2:1b"]
+    - "groq/llama-3.1-8b-instant": ["ollama/llama3.2:1b"]
 
 # =============================================================================
 # CACHE CONFIGURATION - Redis pour performances
