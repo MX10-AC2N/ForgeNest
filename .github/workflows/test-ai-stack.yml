@@ -160,7 +160,7 @@ jobs:
               sleep 5
             done
             echo "  Container démarré, test API..."
-            until curl -sf http://localhost:4000/health > /dev/null; do 
+            until curl -sf -H "Authorization: Bearer sk-test-1234567890" http://localhost:4000/health > /dev/null; do 
               echo "  Attente API litellm..."
               sleep 5
             done
