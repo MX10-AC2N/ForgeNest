@@ -1,0 +1,38 @@
+# ==============================================================================
+# ForgeNest - Orchestration complète
+# ==============================================================================
+# Ce fichier assemble les 2 stacks ForgeNest via Docker Compose include.
+#
+# USAGE :
+#   cp .env.example .env          # Configurer les variables
+#   nano .env                     # Personnaliser les secrets
+#   docker compose up -d          # Démarrer tout
+#   docker compose down -v        # Arrêter et supprimer les volumes
+#
+# STACKS :
+#   Forgejo-Woodpecker_CI-Stack/  → Forge Git + CI/CD
+#   AI-Stack/                     → IA locale (Ollama, LiteLLM, Langfuse...)
+# ==============================================================================
+
+include:
+  - path: Forgejo-Woodpecker_CI-Stack/docker-compose.yml
+    project_directory: Forgejo-Woodpecker_CI-Stack
+    env_file:
+      - .env
+
+  - path: AI-Stack/docker-compose.yaml
+    project_directory: AI-Stack
+    env_file:
+      - .env
+
+# ==============================================================================
+# RÉSEAU BRIDGE PARTAGÉ
+# Permet la communication inter-stacks (ex: Woodpecker → LiteLLM, Goose → Forgejo)
+# ==============================================================================
+networks:
+  forgenest-bridge:
+    name: forgenest-bridge
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
