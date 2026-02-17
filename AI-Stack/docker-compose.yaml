@@ -209,12 +209,9 @@ services:
       - LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE=true
     networks:
       - ai-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/public/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 12          # augmenté pour migrations + clickhouse
-      start_period: 180s   # 3 minutes de grâce au démarrage
+    # Pas de healthcheck - le /api/public/health de Langfuse v3 requiert une auth
+    # et les migrations ClickHouse/Postgres sont très longues (~8-10 min)
+    # Le workflow testera la disponibilité directement depuis l'hôte
     deploy:
       resources:
         limits:
