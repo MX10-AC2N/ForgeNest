@@ -644,3 +644,110 @@ steps:
 *Stack optimisée avec 15 ans d'expertise*
 
 </div>
+
+<!-- AI-STACK-BILAN-START -->
+## 🏆 Statut du Déploiement
+
+> **Dernière validation :** `2026-02-17 07:02 UTC` | [Voir le run GitHub Actions](https://github.com/MX10-AC2N/ForgeNest/actions/runs/22088951751)
+
+### ✅ Tests de Validation (10/10)
+
+| # | Service | Statut | Description |
+|---|---------|--------|-------------|
+| 1 | Redis | ✅ PASS | Cache opérationnel |
+| 2 | Langfuse | ✅ PASS | Analytics & observabilité |
+| 3 | ClickHouse | ✅ PASS | Base analytique v26.1.2 |
+| 4 | Ollama | ✅ PASS | LLM local (llama3.2:1b) |
+| 5 | LiteLLM | ✅ PASS | Gateway + load balancing |
+| 6 | AI Gateway | ✅ PASS | API unifiée |
+| 7 | Goose | ✅ PASS | Agent autonome |
+| 8 | MinIO S3 | ✅ PASS | Stockage objets |
+| 9 | Open WebUI | ✅ PASS | Interface chat |
+| 10 | E2E LiteLLM→Ollama | ✅ PASS | Flux complet validé |
+
+---
+
+### 💾 Espace Disque Requis
+
+> Mesuré automatiquement sur GitHub Actions (Ubuntu 24.04, `ubuntu-latest`)
+
+#### Images Docker
+
+| Image | Taille |
+|-------|--------|
+| `ollama/ollama:latest` | 8.96GB |
+| `ghcr.io/berriai/litellm:main-latest` | 5.56GB |
+| `langfuse/langfuse:3` | 1.35GB |
+| `clickhouse/clickhouse-server:latest` | 1.12GB |
+| `minio/minio:latest` | 241MB |
+| `postgres:15-alpine` | 392MB |
+| `redis:7-alpine` | 61.2MB |
+| `ghcr.io/open-webui/open-webui:main` | 6.54GB |
+| `AI Gateway` (custom build) | ~220 MB |
+| `Goose` (custom build) | ~300 MB |
+
+#### Récapitulatif
+
+| Catégorie | Espace estimé |
+|-----------|--------------|
+| **Toutes les images Docker** | ~9–10 GB |
+| **Modèle `llama3.2:1b` (CI/test)** | ~1.3 GB |
+| **Modèle `llama3.2` (recommandé)** | ~2.0 GB |
+| **Données Langfuse (Postgres + ClickHouse)** | ~500 MB (croissant) |
+| **Cache Redis** | < 50 MB |
+| **Stockage MinIO** | ~100 MB (croissant) |
+| **⚡ TOTAL minimum recommandé** | **~12 GB libres** |
+
+> ⚠️ `open-webui` représente ~3.5 GB. Il peut être désactivé pour économiser de l'espace.
+
+#### Prérequis Système
+
+| Ressource | Minimum | Recommandé |
+|-----------|---------|------------|
+| **RAM** | 8 GB | 16 GB |
+| **CPU** | 4 cœurs | 8 cœurs |
+| **Disque** | 20 GB | 40 GB |
+| **Disque avec modèles >7B** | +4 GB/modèle | +8 GB/modèle |
+
+---
+
+### ⚡ Temps de Démarrage
+
+| Phase | Durée |
+|-------|-------|
+| Pull images (1er lancement) | 5–15 min selon connexion |
+| Build images custom (ai-gateway, goose) | 1–3 min |
+| Démarrage infrastructure (redis, minio, db) | < 1 min |
+| Migrations Langfuse (Postgres + ClickHouse) | 3–5 min |
+| **Total 1er lancement** | **~10–25 min** |
+| **Relancement (images en cache)** | **~2–3 min** |
+
+---
+
+### 🌐 Ports Exposés
+
+| Port | Service | URL |
+|------|---------|-----|
+| `3000` | Open WebUI | http://localhost:3000 |
+| `3001` | Perplexica | http://localhost:3001 |
+| `3002` | Langfuse | http://localhost:3002 |
+| `4000` | LiteLLM + UI Admin | http://localhost:4000 |
+| `8000` | AI Gateway | http://localhost:8000 |
+| `8080` | Tabby (code) | http://localhost:8080 |
+| `11434` | Ollama API | http://localhost:11434 |
+
+---
+
+### 🤖 Modèles Ollama Disponibles
+
+| Modèle | Taille | RAM requise | Usage |
+|--------|--------|-------------|-------|
+| `llama3.2:1b` | ~1.3 GB | 4 GB | Tests, usage léger |
+| `llama3.2` | ~2.0 GB | 8 GB | **Usage quotidien recommandé** |
+| `codellama` | ~3.8 GB | 8 GB | Génération de code |
+| `deepseek-coder` | ~3.8 GB | 8 GB | Analyse de code |
+| `qwen2.5-coder:7b` | ~4.7 GB | 12 GB | Code avancé |
+
+> 💡 `docker compose exec ollama ollama pull llama3.2` pour télécharger un modèle
+
+<!-- AI-STACK-BILAN-END -->
