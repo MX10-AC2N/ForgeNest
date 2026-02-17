@@ -234,7 +234,7 @@ jobs:
           echo "  ✅ Ping OK"
 
           echo "Test query version..."
-          VERSION=\( (curl -sf --user "default: \){CLICKHOUSE_PASSWORD}" \
+          VERSION=$(curl -sf --user "default:${CLICKHOUSE_PASSWORD}" \
             "http://localhost:8123/?query=SELECT%20version()")
           if [[ -n "$VERSION" ]]; then
             echo "  ✅ ClickHouse version: $VERSION"
