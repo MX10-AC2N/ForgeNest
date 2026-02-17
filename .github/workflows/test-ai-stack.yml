@@ -251,11 +251,12 @@ jobs:
       - name: 🧪 Test 5/10 - LiteLLM
         working-directory: AI-Stack
         run: |
-          RESPONSE=$(curl -sf -X POST http://localhost:4000/v1/chat/completions \
+          RESPONSE=$(curl -s -X POST http://localhost:4000/v1/chat/completions \
             -H "Authorization: Bearer sk-test-1234567890" \
             -H "Content-Type: application/json" \
-            -d '{"model": "ollama/llama3.2", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 5}')
-          echo "$RESPONSE" | grep -q "choices" && echo "✅ LiteLLM OK" || exit 1
+            -d '{"model": "ollama/llama3.2:1b", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 5}')
+          echo "Response: $RESPONSE"
+          echo "$RESPONSE" | grep -q "choices" && echo "✅ LiteLLM OK" || { echo "❌ LiteLLM KO"; exit 1; }
 
       - name: 🧪 Test 6/10 - AI Gateway
         working-directory: AI-Stack
@@ -290,7 +291,7 @@ jobs:
           RESPONSE=$(curl -sf -X POST http://localhost:4000/v1/chat/completions \
             -H "Authorization: Bearer sk-test-1234567890" \
             -H "Content-Type: application/json" \
-            -d '{"model": "ollama/llama3.2", "messages": [{"role": "user", "content": "test e2e"}], "max_tokens": 10}')
+            -d '{"model": "ollama/llama3.2:1b", "messages": [{"role": "user", "content": "test e2e"}], "max_tokens": 10}')
           echo "$RESPONSE" | grep -q "choices" && echo "✅ E2E OK" || exit 1
 
       - name: 📊 Résumé final
