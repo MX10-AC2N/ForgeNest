@@ -641,7 +641,7 @@ steps:
 
 **Fait avec ❤️ pour les développeurs**
 
-*Stack optimisée avec 15 ans d'expertise*
+*🤜🤛*
 
 </div>
 
