@@ -3,6 +3,9 @@ name: Test AI Stack
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 env:
   COMPOSE_PROJECT_NAME: forgenest-ai-test
 
@@ -294,22 +297,41 @@ jobs:
             -d '{"model": "ollama/llama3.2:1b", "messages": [{"role": "user", "content": "test e2e"}], "max_tokens": 10}')
           echo "$RESPONSE" | grep -q "choices" && echo "✅ E2E OK" || exit 1
 
-      - name: 📊 Résumé final
+      - name: Generer bilan et commit README
+        if: success()
+        env:
+          GH_RUN_ID: ${{ github.run_id }}
+          GH_REPOSITORY: ${{ github.repository }}
+        run: python3 .github/scripts/generate_bilan.py
+
+      - name: Commit et push du README
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add AI-Stack/README.md
+          if git diff --staged --quiet; then
+            echo "Aucun changement"
+          else
+            git commit -m "docs: Bilan deploiement $(date -u '+%Y-%m-%d') [skip ci]"
+            git push
+            echo "README pousse"
+          fi
+
+      - name: Resume final
         if: always()
         working-directory: AI-Stack
         run: |
           echo "====================================="
-          echo "         RÉSUMÉ DES TESTS"
+          echo "         RESUME DES TESTS"
           echo "====================================="
           docker compose ps
-          echo ""
-          echo "Logs Langfuse (dernières 40 lignes) :"
-          docker compose logs langfuse --tail 40 | grep -i "error\|warn\|exception" || echo "Aucun warning/error récent visible"
+          docker compose logs langfuse --tail 20 | grep -i "error\|warn\|exception" || echo "Aucun warning recent"
 
-      - name: 🧹 Nettoyage
+      - name: Nettoyage
         if: always()
         working-directory: AI-Stack
         run: |
           docker compose down -v --remove-orphans
           docker system prune -f --volumes
-          echo "Nettoyage terminé"
+          echo "Nettoyage termine"
