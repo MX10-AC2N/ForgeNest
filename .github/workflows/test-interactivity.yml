@@ -7,8 +7,9 @@ permissions:
   contents: write
 
 env:
-  COMPOSE_PROJECT_NAME: forgenest-integration-test
   LITELLM_KEY: sk-integration-test-1234567890
+  FORGEJO_PROJECT: forgenest-forgejo
+  AI_PROJECT: forgenest-ai
 
 jobs:
   test-interactivity:
@@ -107,11 +108,15 @@ jobs:
 
       - name: Demarrer Stack Forgejo
         working-directory: Forgejo-Woodpecker_CI-Stack
+        env:
+          COMPOSE_PROJECT_NAME: ${{ env.FORGEJO_PROJECT }}
         run: docker compose up -d
 
       - name: Attendre Forgejo healthy
         timeout-minutes: 10
         working-directory: Forgejo-Woodpecker_CI-Stack
+        env:
+          COMPOSE_PROJECT_NAME: ${{ env.FORGEJO_PROJECT }}
         run: |
           for i in $(seq 1 120); do
             if curl -sf http://localhost:5333/api/healthz > /dev/null 2>&1; then
@@ -126,6 +131,8 @@ jobs:
       - name: Attendre OAuth Forgejo
         timeout-minutes: 4
         working-directory: Forgejo-Woodpecker_CI-Stack
+        env:
+          COMPOSE_PROJECT_NAME: ${{ env.FORGEJO_PROJECT }}
         run: |
           for i in $(seq 1 36); do
             if docker compose logs forgejo 2>/dev/null | grep -q "first-run-init.sh terminé"; then
@@ -143,6 +150,8 @@ jobs:
 
       - name: Configurer OAuth dans Woodpecker
         working-directory: Forgejo-Woodpecker_CI-Stack
+        env:
+          COMPOSE_PROJECT_NAME: ${{ env.FORGEJO_PROJECT }}
         run: |
           OAUTH_CLIENT=$(docker compose logs forgejo 2>/dev/null \
             | grep -E "^forgejo.*WOODPECKER_FORGEJO_CLIENT=" | tail -n1 \
@@ -168,24 +177,26 @@ jobs:
 
       - name: Demarrer Stack IA (core)
         working-directory: AI-Stack
-        run: docker compose up -d redis ollama litellm ai-gateway goose
+        run: docker compose up -d --remove-orphans redis ollama litellm ai-gateway goose
 
       - name: Attendre Stack IA
         working-directory: AI-Stack
+        env:
+          COMPOSE_PROJECT_NAME: ${{ env.AI_PROJECT }}
         run: |
           echo "Attente ollama..."
           timeout 180s sh -c '
-            until docker compose ps ollama | grep -q "Up"; do sleep 3; done
+            until docker ps --filter name=ollama --filter status=running | grep -q ollama; do sleep 3; done
             until curl -sf http://localhost:11434/ > /dev/null; do sleep 5; done
             echo "Ollama OK"
           '
 
           echo "Pull llama3.2:1b..."
-          docker compose exec -T ollama ollama pull llama3.2:1b
+          docker exec ollama ollama pull llama3.2:1b
 
           echo "Attente litellm..."
           timeout 300s sh -c '
-            until docker compose ps litellm | grep -q "Up"; do sleep 3; done
+            until docker ps --filter name=litellm-proxy --filter status=running | grep -q litellm; do sleep 3; done
             until curl -sf -o /dev/null \
               -H "Authorization: Bearer sk-integration-test-1234567890" \
               http://localhost:4000/health; do sleep 5; done
@@ -194,7 +205,7 @@ jobs:
 
           echo "Attente ai-gateway..."
           timeout 120s sh -c '
-            until docker compose ps ai-gateway | grep -q "(healthy)"; do sleep 5; done
+            until docker exec ai-gateway curl -sf http://localhost:8000/health > /dev/null 2>&1; do sleep 5; done
             echo "AI Gateway OK"
           '
 
@@ -287,8 +298,10 @@ jobs:
 
       - name: "Test 5/6 - Cache Redis actif"
         working-directory: AI-Stack
+        env:
+          COMPOSE_PROJECT_NAME: ${{ env.AI_PROJECT }}
         run: |
-          docker compose exec -T ai-redis redis-cli ping | grep -q "PONG" \
+          docker exec ai-redis redis-cli ping | grep -q "PONG" \
             && echo "  OK: Redis PONG" || { echo "  FAIL: Redis ne repond pas"; exit 1; }
 
           # 2 requetes identiques pour peupler le cache LiteLLM
@@ -301,7 +314,7 @@ jobs:
             sleep 1
           done
 
-          KEYS=$(docker compose exec -T ai-redis redis-cli dbsize)
+          KEYS=$(docker exec ai-redis redis-cli dbsize)
           echo "  Cles Redis: $KEYS"
           echo "  OK: Redis actif et utilise"
           echo "Test 5/6 PASSE"
@@ -363,9 +376,9 @@ jobs:
           echo "  RESUME INTERACTIVITE"
           echo "=============================="
           echo "Stack Forgejo:"
-          cd Forgejo-Woodpecker_CI-Stack && docker compose ps --format "table {{.Name}}\t{{.Status}}" || true
+          cd Forgejo-Woodpecker_CI-Stack && COMPOSE_PROJECT_NAME=$FORGEJO_PROJECT docker compose ps --format "table {{.Name}}\t{{.Status}}" || true
           echo "Stack IA:"
-          cd ../AI-Stack && docker compose ps --format "table {{.Name}}\t{{.Status}}" || true
+          cd ../AI-Stack && COMPOSE_PROJECT_NAME=$AI_PROJECT docker compose ps --format "table {{.Name}}\t{{.Status}}" || true
           echo "Reseau bridge:"
           docker network inspect forgenest-bridge \
             --format '{{range .Containers}}  {{.Name}}{{println}}{{end}}' 2>/dev/null || true
@@ -374,19 +387,19 @@ jobs:
         if: failure()
         run: |
           cd Forgejo-Woodpecker_CI-Stack
-          docker compose logs forgejo --tail 40 || true
-          docker compose logs woodpecker-server --tail 20 || true
+          COMPOSE_PROJECT_NAME=$FORGEJO_PROJECT docker compose logs forgejo --tail 40 || true
+          COMPOSE_PROJECT_NAME=$FORGEJO_PROJECT docker compose logs woodpecker-server --tail 20 || true
           cd ../AI-Stack
-          docker compose logs ollama --tail 20 || true
-          docker compose logs litellm --tail 20 || true
-          docker compose logs ai-gateway --tail 20 || true
+          COMPOSE_PROJECT_NAME=$AI_PROJECT docker compose logs ollama --tail 20 || true
+          COMPOSE_PROJECT_NAME=$AI_PROJECT docker compose logs litellm --tail 20 || true
+          COMPOSE_PROJECT_NAME=$AI_PROJECT docker compose logs ai-gateway --tail 20 || true
           docker network inspect forgenest-bridge || true
 
       - name: Nettoyage
         if: always()
         run: |
-          cd Forgejo-Woodpecker_CI-Stack && docker compose down -v --remove-orphans || true
-          cd ../AI-Stack && docker compose down -v --remove-orphans || true
+          cd Forgejo-Woodpecker_CI-Stack && COMPOSE_PROJECT_NAME=$FORGEJO_PROJECT docker compose down -v --remove-orphans || true
+          cd ../AI-Stack && COMPOSE_PROJECT_NAME=$AI_PROJECT docker compose down -v --remove-orphans || true
           docker network rm forgenest-bridge || true
           docker system prune -f --volumes || true
           echo "Nettoyage termine"
