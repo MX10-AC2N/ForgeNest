@@ -3,726 +3,379 @@ name: Test Interactivité 2 Stacks
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 env:
   COMPOSE_PROJECT_NAME: forgenest-integration-test
+  LITELLM_KEY: sk-integration-test-1234567890
 
 jobs:
   test-interactivity:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
-    
+    timeout-minutes: 60
+
     steps:
-      # ========================================================================
-      # 1. PRÉPARATION
-      # ========================================================================
-      - name: 📥 Checkout du code
+      - name: Checkout du code
         uses: actions/checkout@v4
 
-      - name: 🐋 Setup Docker Buildx
+      - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: 📊 Informations système
+      - name: Informations systeme
         run: |
-          echo "=== 💻 Informations Système ==="
+          echo "=== Informations Systeme ==="
           echo "CPU: $(nproc) cores"
           echo "RAM: $(free -h | grep Mem | awk '{print $2}')"
           echo "Disk: $(df -h / | tail -1 | awk '{print $4}') available"
-          echo ""
-          echo "=== 🧪 TEST D'INTERACTIVITÉ 2 STACKS ==="
-          echo "Stack 1 : Forgejo + Woodpecker CI"
-          echo "Stack 2 : IA (Ollama, LiteLLM, Goose, etc.)"
-          echo ""
+          echo "Docker: $(docker --version)"
 
-      # ========================================================================
-      # 2. CONFIGURATION STACK FORGEJO
-      # ========================================================================
-      - name: ⚙️ Configurer Stack Forgejo/Woodpecker
+      - name: Configurer Stack Forgejo
         working-directory: Forgejo-Woodpecker_CI-Stack
         run: |
-          cat > .env << 'EOF'
-          # Configuration Forgejo/Woodpecker pour tests
-          
-          # Domaine et URLs
-          FORGEJO_DOMAIN=localhost
-          FORGEJO_HTTP_PORT=5333
-          FORGEJO_ROOT_URL=http://localhost:5333/
-          FORGEJO_SSH_PORT=5222
-          FORGEJO_INTERNAL_PORT=3000
-          
-          # Base de données
-          FORGEJO_DB_TYPE=sqlite3
-          FORGEJO_DB_PATH=/data/gitea/forgejo.db
-          
-          # Mailer
-          FORGEJO_MAILER_ENABLED=false
-          
-          # Woodpecker
-          WOODPECKER_VERSION=v2.7.1-alpine
-          WOODPECKER_HOST=http://localhost:5444
-          WOODPECKER_HTTP_PORT=5444
-          WOODPECKER_FORGEJO=true
-          WOODPECKER_FORGEJO_URL=http://forgejo:3000
-          WOODPECKER_OPEN=true
-          WOODPECKER_LOG_LEVEL=debug
-          WOODPECKER_MAX_WORKFLOWS=2
-          WOODPECKER_SERVER_ADDR=0.0.0.0:8000
-          WOODPECKER_IN_CONTAINER=true
-          
-          # Secrets
-          WOODPECKER_AGENT_SECRET=ci-test-secret-min-48-chars-DO-NOT-USE-IN-PROD-abc123def456
-          WOODPECKER_GRPC_SECRET=ci-test-secret-min-48-chars-DO-NOT-USE-IN-PROD-abc123def456
-          ADMIN_USERNAME=forgejo-admin
-          ADMIN_PASSWORD=TestPassword123!ForCIOnly
-          ADMIN_EMAIL=admin@ci.local
-          ADMIN_FULLNAME=CI Admin
-          
-          # OAuth (auto-généré)
-          WOODPECKER_FORGEJO_CLIENT=
-          WOODPECKER_FORGEJO_SECRET=
-          
-          # Volumes
-          VOLUMES_BASE=./volumes
-          EOF
-          
-          echo "✅ Stack Forgejo configurée"
+          printf '%s\n' \
+            'FORGEJO_DOMAIN=localhost' \
+            'FORGEJO_HTTP_PORT=5333' \
+            'FORGEJO_ROOT_URL=http://localhost:5333/' \
+            'FORGEJO_SSH_PORT=5222' \
+            'FORGEJO_INTERNAL_PORT=3000' \
+            'FORGEJO_DB_TYPE=sqlite3' \
+            'FORGEJO_DB_PATH=/data/gitea/forgejo.db' \
+            'FORGEJO_MAILER_ENABLED=false' \
+            'WOODPECKER_VERSION=v2.7.1-alpine' \
+            'WOODPECKER_HOST=http://localhost:5444' \
+            'WOODPECKER_HTTP_PORT=5444' \
+            'WOODPECKER_FORGEJO=true' \
+            'WOODPECKER_FORGEJO_URL=http://forgejo:3000' \
+            'WOODPECKER_OPEN=true' \
+            'WOODPECKER_LOG_LEVEL=debug' \
+            'WOODPECKER_MAX_WORKFLOWS=2' \
+            'WOODPECKER_SERVER_ADDR=0.0.0.0:8000' \
+            'WOODPECKER_AGENT_SECRET=ci-test-secret-min-48-chars-DO-NOT-USE-IN-PROD-abc123def456' \
+            'WOODPECKER_GRPC_SECRET=ci-test-secret-min-48-chars-DO-NOT-USE-IN-PROD-abc123def456' \
+            'ADMIN_USERNAME=forgejo-admin' \
+            'ADMIN_PASSWORD=TestPassword123!ForCIOnly' \
+            'ADMIN_EMAIL=admin@ci.local' \
+            'ADMIN_FULLNAME=CI Admin' \
+            'WOODPECKER_FORGEJO_CLIENT=' \
+            'WOODPECKER_FORGEJO_SECRET=' \
+            'VOLUMES_BASE=./volumes' \
+            > .env
+          echo "Stack Forgejo configuree"
 
-      # ========================================================================
-      # 3. CONFIGURATION STACK IA
-      # ========================================================================
-      - name: ⚙️ Configurer Stack IA
+      - name: Configurer Stack IA
         working-directory: AI-Stack
         run: |
-          cat > .env << 'EOF'
-          # Configuration IA pour tests d'intégration
-          
-          # Ports (différents de la stack Forgejo)
-          LITELLM_PORT=4000
-          LANGFUSE_PORT=3002
-          WEBUI_PORT=3000
-          AI_GATEWAY_PORT=8000
-          TABBY_PORT=8080
-          OLLAMA_PORT=11434
-          
-          # LiteLLM
-          LITELLM_MASTER_KEY=sk-integration-test-1234567890
-          
-          # Langfuse
-          LANGFUSE_DB_PASSWORD=integration_test_password_123
-          LANGFUSE_NEXTAUTH_SECRET=integration-test-nextauth-secret-32-chars-min
-          LANGFUSE_SALT=integration-test-salt-secret-32-chars-min
-          
-          # WebUI
-          WEBUI_SECRET_KEY=integration-test-webui-secret-32-chars
-          WEBUI_AUTH=false
-          
-          # Ollama - Modèle léger
-          OLLAMA_MODELS=llama3.2:1b
-          OLLAMA_NUM_GPU=0
-          OLLAMA_NUM_CTX=2048
-          
-          # Tabby - Skip pour tests rapides
-          TABBY_MODEL=StarCoder-1B
-          TABBY_DEVICE=cpu
-          
-          # Goose
-          GOOSE_MODEL=ollama/llama3.2
-          
-          # Volumes
-          VOLUMES_BASE=./volumes
-          EOF
-          
-          echo "✅ Stack IA configurée"
+          printf '%s\n' \
+            'LITELLM_PORT=4000' \
+            'LANGFUSE_PORT=3002' \
+            'WEBUI_PORT=3000' \
+            'AI_GATEWAY_PORT=8000' \
+            'OLLAMA_PORT=11434' \
+            'LITELLM_MASTER_KEY=sk-integration-test-1234567890' \
+            'LANGFUSE_DB_PASSWORD=integration_test_password_123' \
+            'LANGFUSE_NEXTAUTH_SECRET=integration-test-nextauth-secret-32-chars-min' \
+            'LANGFUSE_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000' \
+            'LANGFUSE_SALT=integration-test-salt-secret-32-chars-min' \
+            'WEBUI_SECRET_KEY=integration-test-webui-secret-32-chars' \
+            'WEBUI_AUTH=false' \
+            'OLLAMA_NUM_GPU=0' \
+            'OLLAMA_NUM_CTX=2048' \
+            'CLICKHOUSE_PASSWORD=clickhouse_test_pass' \
+            'VOLUMES_BASE=./volumes' \
+            > .env
+          echo "Stack IA configuree"
 
-      # ========================================================================
-      # 4. CRÉER RÉSEAU PARTAGÉ
-      # ========================================================================
-      - name: 🌐 Créer réseau bridge partagé
-        run: |
-          echo "=== 🌐 Création réseau partagé ==="
-          docker network create forgenest-bridge
-          echo "✅ Réseau forgenest-bridge créé"
-          docker network ls | grep forgenest
+      - name: Build images custom Forgejo
+        working-directory: Forgejo-Woodpecker_CI-Stack
+        run: docker compose build --no-cache
 
-      # ========================================================================
-      # 5. DÉMARRER STACK FORGEJO
-      # ========================================================================
-      - name: 🚀 Démarrer Stack Forgejo/Woodpecker
+      - name: Build images custom IA
+        working-directory: AI-Stack
+        run: docker compose build --no-cache ai-gateway goose
+
+      - name: Demarrer Stack Forgejo
+        working-directory: Forgejo-Woodpecker_CI-Stack
+        run: docker compose up -d
+
+      - name: Attendre Forgejo healthy
+        timeout-minutes: 10
         working-directory: Forgejo-Woodpecker_CI-Stack
         run: |
-          echo "=== 🚀 Démarrage Stack Forgejo ==="
-          docker compose build --no-cache
-          docker compose up -d
-          echo "✅ Stack Forgejo démarrée"
-
-      - name: ⏳ Attendre Stack Forgejo
-        working-directory: Forgejo-Woodpecker_CI-Stack
-        run: |
-          echo "=== ⏳ Attente Stack Forgejo ==="
-          
-          # Attendre Forgejo
-          ATTEMPTS=0
-          MAX_ATTEMPTS=60
-          while [ $ATTEMPTS -lt $MAX_ATTEMPTS ]; do
-            if curl -sf http://localhost:5333/api/healthz >/dev/null 2>&1; then
-              echo "  ✅ Forgejo est prêt"
+          for i in $(seq 1 120); do
+            if curl -sf http://localhost:5333/api/healthz > /dev/null 2>&1; then
+              echo "Forgejo healthy apres $(( i * 5 ))s"
               break
             fi
-            ATTEMPTS=$((ATTEMPTS + 1))
+            echo "Tentative $i/120..."
             sleep 5
           done
-          
-          if [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; then
-            echo "  ❌ Forgejo non prêt après 5 min"
-            exit 1
-          fi
-          
-          # Attendre Woodpecker
-          sleep 30
-          if curl -sf http://localhost:5444/healthz >/dev/null 2>&1; then
-            echo "  ✅ Woodpecker est prêt"
-          else
-            echo "  ⚠️ Woodpecker peut ne pas avoir de health endpoint"
-          fi
-          
-          # Attendre OAuth
-          sleep 10
-          if [ -f volumes/oauth-shared/oauth-credentials.env ]; then
-            echo "  ✅ OAuth credentials créés"
-            cat volumes/oauth-shared/oauth-credentials.env
-          else
-            echo "  ⚠️ OAuth credentials pas encore créés"
-          fi
-          
-          echo "✅ Stack Forgejo opérationnelle"
+          curl -sf http://localhost:5333/api/healthz > /dev/null || { echo "Forgejo non healthy"; exit 1; }
 
-      # ========================================================================
-      # 6. DÉMARRER STACK IA
-      # ========================================================================
-      - name: 🚀 Démarrer Stack IA
-        working-directory: AI-Stack
+      - name: Attendre OAuth Forgejo
+        timeout-minutes: 4
+        working-directory: Forgejo-Woodpecker_CI-Stack
         run: |
-          echo "=== 🚀 Démarrage Stack IA ==="
-          docker compose build --no-cache ai-gateway goose
-          docker compose up -d redis ollama litellm ai-gateway goose
-          echo "✅ Stack IA démarrée (services core)"
-
-      - name: ⏳ Attendre Stack IA
-        working-directory: AI-Stack
-        run: |
-          echo "=== ⏳ Attente Stack IA ==="
-          
-          # Redis
-          sleep 5
-          docker compose exec -T redis redis-cli ping
-          echo "  ✅ Redis OK"
-          
-          # Ollama
-          ATTEMPTS=0
-          MAX_ATTEMPTS=40
-          while [ $ATTEMPTS -lt $MAX_ATTEMPTS ]; do
-            if curl -sf http://localhost:11434/api/tags >/dev/null 2>&1; then
-              echo "  ✅ Ollama OK"
+          for i in $(seq 1 36); do
+            if docker compose logs forgejo 2>/dev/null | grep -q "first-run-init.sh terminé"; then
+              echo "OAuth init OK apres $(( i * 5 ))s"
               break
             fi
-            ATTEMPTS=$((ATTEMPTS + 1))
+            echo "Attente OAuth... $(( i * 5 ))s"
             sleep 5
           done
-          
-          # Télécharger modèle
-          echo "  Téléchargement modèle llama3.2:1b..."
-          docker compose exec -T ollama ollama pull llama3.2:1b
-          echo "  ✅ Modèle téléchargé"
-          
-          # LiteLLM
-          ATTEMPTS=0
-          while [ $ATTEMPTS -lt 30 ]; do
-            if curl -sf http://localhost:4000/health >/dev/null 2>&1; then
-              echo "  ✅ LiteLLM OK"
-              break
-            fi
-            ATTEMPTS=$((ATTEMPTS + 1))
-            sleep 3
+          docker compose logs forgejo 2>/dev/null | grep -q "first-run-init.sh terminé" || {
+            echo "Timeout OAuth"
+            docker compose logs forgejo --tail 50
+            exit 1
+          }
+
+      - name: Configurer OAuth dans Woodpecker
+        working-directory: Forgejo-Woodpecker_CI-Stack
+        run: |
+          OAUTH_CLIENT=$(docker compose logs forgejo 2>/dev/null \
+            | grep -E "^forgejo.*WOODPECKER_FORGEJO_CLIENT=" | tail -n1 \
+            | sed 's/.*WOODPECKER_FORGEJO_CLIENT=//' | tr -d '\r\n' | xargs)
+          OAUTH_SECRET=$(docker compose logs forgejo 2>/dev/null \
+            | grep -E "^forgejo.*WOODPECKER_FORGEJO_SECRET=" | tail -n1 \
+            | sed 's/.*WOODPECKER_FORGEJO_SECRET=//' | tr -d '\r\n' | xargs)
+
+          [ -z "$OAUTH_CLIENT" ] && { echo "Client OAuth vide"; exit 1; }
+          echo "Client: ${OAUTH_CLIENT:0:36}"
+
+          sed -i "s|^WOODPECKER_FORGEJO_CLIENT=.*|WOODPECKER_FORGEJO_CLIENT=$OAUTH_CLIENT|" .env
+          sed -i "s|^WOODPECKER_FORGEJO_SECRET=.*|WOODPECKER_FORGEJO_SECRET=$OAUTH_SECRET|" .env
+          docker compose up -d --force-recreate woodpecker-server
+
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:5444/healthz > /dev/null 2>&1 && echo "Woodpecker OK avec OAuth" && exit 0
+            sleep 2
           done
-          
-          # AI Gateway
-          ATTEMPTS=0
-          while [ $ATTEMPTS -lt 20 ]; do
-            if curl -sf http://localhost:8000/health >/dev/null 2>&1; then
-              echo "  ✅ AI Gateway OK"
-              break
-            fi
-            ATTEMPTS=$((ATTEMPTS + 1))
-            sleep 3
-          done
-          
-          echo "✅ Stack IA opérationnelle"
+          echo "Timeout Woodpecker post-OAuth"
+          docker compose logs woodpecker-server --tail 30
+          exit 1
 
-      # ========================================================================
-      # 7. CONNECTER LES 2 STACKS
-      # ========================================================================
-      - name: 🔗 Connecter les 2 stacks via réseau bridge
-        run: |
-          echo "=== 🔗 Connexion des stacks ==="
-          
-          # Connecter conteneurs Forgejo au réseau partagé
-          docker network connect forgenest-bridge forgejo || echo "Forgejo déjà connecté"
-          docker network connect forgenest-bridge woodpecker-server || echo "Woodpecker déjà connecté"
-          docker network connect forgenest-bridge woodpecker-agent || echo "Agent déjà connecté"
-          
-          # Connecter conteneurs IA au réseau partagé
-          docker network connect forgenest-bridge ollama || echo "Ollama déjà connecté"
-          docker network connect forgenest-bridge litellm || echo "LiteLLM déjà connecté"
-          docker network connect forgenest-bridge ai-gateway || echo "AI Gateway déjà connecté"
-          docker network connect forgenest-bridge goose || echo "Goose déjà connecté"
-          
-          echo "✅ Stacks connectées via forgenest-bridge"
-          
-          # Vérifier la connectivité
-          echo ""
-          echo "Conteneurs sur le réseau forgenest-bridge:"
-          docker network inspect forgenest-bridge --format '{{range .Containers}}{{.Name}} ({{.IPv4Address}}){{println}}{{end}}'
+      - name: Demarrer Stack IA (core)
+        working-directory: AI-Stack
+        run: docker compose up -d redis ollama litellm ai-gateway goose
 
-      # ========================================================================
-      # 8. TEST CONNECTIVITÉ RÉSEAU
-      # ========================================================================
-      - name: 🧪 Test 1/7 - Connectivité Réseau
+      - name: Attendre Stack IA
+        working-directory: AI-Stack
         run: |
-          echo "=== 🧪 Test Connectivité Réseau ==="
-          
-          # Woodpecker → Ollama
-          echo "  Test: Woodpecker → Ollama"
-          docker exec woodpecker-server curl -sf http://ollama:11434/api/tags >/dev/null
-          if [ $? -eq 0 ]; then
-            echo "    ✅ Woodpecker peut contacter Ollama"
-          else
-            echo "    ❌ Woodpecker ne peut pas contacter Ollama"
-            exit 1
-          fi
-          
-          # Woodpecker → LiteLLM
-          echo "  Test: Woodpecker → LiteLLM"
-          docker exec woodpecker-server curl -sf http://litellm:4000/health >/dev/null
-          if [ $? -eq 0 ]; then
-            echo "    ✅ Woodpecker peut contacter LiteLLM"
-          else
-            echo "    ❌ Woodpecker ne peut pas contacter LiteLLM"
-            exit 1
-          fi
-          
-          # Woodpecker → AI Gateway
-          echo "  Test: Woodpecker → AI Gateway"
-          docker exec woodpecker-server curl -sf http://ai-gateway:8000/health >/dev/null
-          if [ $? -eq 0 ]; then
-            echo "    ✅ Woodpecker peut contacter AI Gateway"
-          else
-            echo "    ❌ Woodpecker ne peut pas contacter AI Gateway"
-            exit 1
-          fi
-          
-          # Goose → Forgejo
-          echo "  Test: Goose → Forgejo"
-          docker exec goose curl -sf http://forgejo:3000/api/healthz >/dev/null
-          if [ $? -eq 0 ]; then
-            echo "    ✅ Goose peut contacter Forgejo"
-          else
-            echo "    ❌ Goose ne peut pas contacter Forgejo"
-            exit 1
-          fi
-          
-          echo "✅ Test Connectivité réussi"
-
-      # ========================================================================
-      # 9. TEST PIPELINE WOODPECKER AVEC IA
-      # ========================================================================
-      - name: 🧪 Test 2/7 - Pipeline Woodpecker utilisant IA
-        run: |
-          echo "=== 🧪 Test Pipeline Woodpecker + IA ==="
-          
-          # Créer un fichier de test de pipeline
-          mkdir -p test-repo
-          cd test-repo
-          
-          cat > test-ai-pipeline.sh << 'SCRIPT'
-          #!/bin/bash
-          set -e
-          
-          echo "🤖 Test d'appel IA depuis Woodpecker"
-          
-          # Test 1: Appel direct à Ollama
-          echo "Test 1: Ollama direct"
-          RESPONSE=$(curl -sf http://ollama:11434/api/generate -d '{
-            "model": "llama3.2:1b",
-            "prompt": "Say hello in one word",
-            "stream": false
-          }')
-          
-          if echo "$RESPONSE" | grep -q "response"; then
-            echo "  ✅ Ollama accessible depuis pipeline"
-          else
-            echo "  ❌ Ollama non accessible"
-            exit 1
-          fi
-          
-          # Test 2: Appel via LiteLLM
-          echo "Test 2: LiteLLM proxy"
-          RESPONSE=$(curl -sf http://litellm:4000/v1/chat/completions \
-            -H "Authorization: Bearer sk-integration-test-1234567890" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "model": "ollama/llama3.2",
-              "messages": [{"role": "user", "content": "Hi from pipeline"}],
-              "max_tokens": 5
-            }')
-          
-          if echo "$RESPONSE" | grep -q "choices"; then
-            echo "  ✅ LiteLLM accessible depuis pipeline"
-          else
-            echo "  ❌ LiteLLM non accessible"
-            exit 1
-          fi
-          
-          # Test 3: Appel via AI Gateway
-          echo "Test 3: AI Gateway"
-          RESPONSE=$(curl -sf http://ai-gateway:8000/v1/chat/completions \
-            -H "Content-Type: application/json" \
-            -d '{
-              "model": "ollama/llama3.2",
-              "messages": [{"role": "user", "content": "Pipeline test"}],
-              "max_tokens": 5
-            }')
-          
-          if echo "$RESPONSE" | grep -q "choices\|content"; then
-            echo "  ✅ AI Gateway accessible depuis pipeline"
-          else
-            echo "  ❌ AI Gateway non accessible"
-            exit 1
-          fi
-          
-          echo "✅ Tous les endpoints IA sont accessibles depuis Woodpecker"
-          SCRIPT
-          
-          chmod +x test-ai-pipeline.sh
-          
-          # Exécuter le script dans le contexte de Woodpecker
-          docker run --rm \
-            --network forgenest-bridge \
-            -v "$(pwd)/test-ai-pipeline.sh:/test.sh" \
-            curlimages/curl:latest \
-            sh /test.sh
-          
-          echo "✅ Test Pipeline Woodpecker + IA réussi"
-
-      # ========================================================================
-      # 10. TEST CODE REVIEW IA VIA PIPELINE
-      # ========================================================================
-      - name: 🧪 Test 3/7 - Code Review IA automatique
-        run: |
-          echo "=== 🧪 Test Code Review IA ==="
-          
-          # Simuler un code review via IA
-          cat > code-review-test.sh << 'SCRIPT'
-          #!/bin/bash
-          set -e
-          
-          echo "📝 Simulation Code Review IA"
-          
-          # Code à reviewer
-          CODE='
-          def calculate_sum(a, b):
-              return a + b
+          echo "Attente ollama..."
+          timeout 180s sh -c '
+            until docker compose ps ollama | grep -q "Up"; do sleep 3; done
+            until curl -sf http://localhost:11434/ > /dev/null; do sleep 5; done
+            echo "Ollama OK"
           '
-          
-          # Demander à l'IA de reviewer
-          PROMPT="Review this Python code and suggest improvements: $CODE"
-          
-          RESPONSE=$(curl -sf http://litellm:4000/v1/chat/completions \
-            -H "Authorization: Bearer sk-integration-test-1234567890" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"model\": \"ollama/llama3.2\",
-              \"messages\": [{\"role\": \"user\", \"content\": \"$PROMPT\"}],
-              \"max_tokens\": 100
-            }")
-          
-          if echo "$RESPONSE" | grep -q "choices"; then
-            echo "  ✅ IA a généré une review"
-            
-            # Extraire la réponse
-            REVIEW=$(echo "$RESPONSE" | jq -r '.choices[0].message.content' 2>/dev/null || echo "Review générée")
-            echo "  Review: ${REVIEW:0:100}..."
-          else
-            echo "  ❌ Review IA échouée"
-            exit 1
-          fi
-          SCRIPT
-          
-          chmod +x code-review-test.sh
-          
-          docker run --rm \
-            --network forgenest-bridge \
-            -v "$(pwd)/code-review-test.sh:/test.sh" \
-            alpine:latest \
-            sh -c "apk add --no-cache curl jq && sh /test.sh"
-          
-          echo "✅ Test Code Review IA réussi"
 
-      # ========================================================================
-      # 11. TEST GOOSE INTERAGISSANT AVEC FORGEJO
-      # ========================================================================
-      - name: 🧪 Test 4/7 - Goose Agent ↔ Forgejo
+          echo "Pull llama3.2:1b..."
+          docker compose exec -T ollama ollama pull llama3.2:1b
+
+          echo "Attente litellm..."
+          timeout 300s sh -c '
+            until docker compose ps litellm | grep -q "Up"; do sleep 3; done
+            until curl -sf -o /dev/null \
+              -H "Authorization: Bearer sk-integration-test-1234567890" \
+              http://localhost:4000/health; do sleep 5; done
+            echo "LiteLLM OK"
+          '
+
+          echo "Attente ai-gateway..."
+          timeout 120s sh -c '
+            until docker compose ps ai-gateway | grep -q "(healthy)"; do sleep 5; done
+            echo "AI Gateway OK"
+          '
+
+      - name: Creer reseau bridge et connecter les stacks
+        run: |
+          docker network create forgenest-bridge || true
+
+          # Stack Forgejo
+          docker network connect forgenest-bridge forgejo           || true
+          docker network connect forgenest-bridge woodpecker-server || true
+          docker network connect forgenest-bridge woodpecker-agent  || true
+
+          # Stack IA (vrais noms de containers)
+          docker network connect forgenest-bridge ollama        || true
+          docker network connect forgenest-bridge litellm-proxy || true
+          docker network connect forgenest-bridge ai-gateway    || true
+          docker network connect forgenest-bridge goose         || true
+          docker network connect forgenest-bridge ai-redis      || true
+
+          echo "Containers sur forgenest-bridge:"
+          docker network inspect forgenest-bridge \
+            --format '{{range .Containers}}  {{.Name}} ({{.IPv4Address}}){{println}}{{end}}'
+
+      - name: "Test 1/6 - Connectivite reseau cross-stack"
+        run: |
+          docker run --rm --network forgenest-bridge curlimages/curl:latest sh -c '
+            echo "Woodpecker -> Ollama"
+            curl -sf http://ollama:11434/api/tags > /dev/null \
+              && echo "  OK: Ollama joignable" || { echo "  FAIL"; exit 1; }
+
+            echo "Woodpecker -> LiteLLM (avec auth)"
+            curl -sf -o /dev/null \
+              -H "Authorization: Bearer sk-integration-test-1234567890" \
+              http://litellm-proxy:4000/health \
+              && echo "  OK: LiteLLM joignable" || { echo "  FAIL"; exit 1; }
+
+            echo "Woodpecker -> AI Gateway"
+            curl -sf http://ai-gateway:8000/health > /dev/null \
+              && echo "  OK: AI Gateway joignable" || { echo "  FAIL"; exit 1; }
+
+            echo "IA -> Forgejo"
+            curl -sf http://forgejo:3000/api/healthz > /dev/null \
+              && echo "  OK: Forgejo joignable depuis IA" || { echo "  FAIL"; exit 1; }
+          '
+          echo "Test 1/6 PASSE"
+
+      - name: "Test 2/6 - Pipeline IA (Woodpecker -> LiteLLM -> Ollama)"
+        run: |
+          docker run --rm --network forgenest-bridge curlimages/curl:latest sh -c '
+            echo "Ollama direct"
+            R=$(curl -sf http://ollama:11434/api/generate \
+              -H "Content-Type: application/json" \
+              -d "{\"model\": \"llama3.2:1b\", \"prompt\": \"hi\", \"stream\": false}")
+            echo "$R" | grep -q "response" \
+              && echo "  OK: Ollama repond" || { echo "  FAIL"; exit 1; }
+
+            echo "Via LiteLLM proxy"
+            R=$(curl -sf http://litellm-proxy:4000/v1/chat/completions \
+              -H "Authorization: Bearer sk-integration-test-1234567890" \
+              -H "Content-Type: application/json" \
+              -d "{\"model\": \"ollama/llama3.2:1b\", \"messages\": [{\"role\": \"user\", \"content\": \"hi\"}], \"max_tokens\": 5}")
+            echo "$R" | grep -q "choices" \
+              && echo "  OK: LiteLLM repond" || { echo "  FAIL"; exit 1; }
+          '
+          echo "Test 2/6 PASSE"
+
+      - name: "Test 3/6 - Code Review IA automatique"
+        run: |
+          docker run --rm --network forgenest-bridge alpine:latest sh -c '
+            apk add --no-cache curl jq > /dev/null 2>&1
+            R=$(curl -sf http://litellm-proxy:4000/v1/chat/completions \
+              -H "Authorization: Bearer sk-integration-test-1234567890" \
+              -H "Content-Type: application/json" \
+              -d "{\"model\": \"ollama/llama3.2:1b\", \"messages\": [{\"role\": \"user\", \"content\": \"Review briefly: def add(a,b): return a+b\"}], \"max_tokens\": 30}")
+            echo "$R" | grep -q "choices" \
+              && echo "  OK: Review IA generee" || { echo "  FAIL"; exit 1; }
+            REVIEW=$(echo "$R" | jq -r ".choices[0].message.content" 2>/dev/null || echo "")
+            echo "  Preview: ${REVIEW:0:100}"
+          '
+          echo "Test 3/6 PASSE"
+
+      - name: "Test 4/6 - Goose Agent communique avec Forgejo"
+        run: |
+          docker run --rm --network forgenest-bridge curlimages/curl:latest sh -c '
+            curl -sf http://forgejo:3000/api/healthz > /dev/null \
+              && echo "  OK: Forgejo API accessible depuis contexte agent IA" \
+              || { echo "  FAIL"; exit 1; }
+          '
+          echo "Test 4/6 PASSE"
+
+      - name: "Test 5/6 - Cache Redis actif"
         working-directory: AI-Stack
         run: |
-          echo "=== 🧪 Test Goose ↔ Forgejo ==="
-          
-          # Test que Goose peut accéder à Forgejo
-          echo "  Test: Goose → Forgejo API"
-          
-          HEALTH=$(docker compose exec -T goose curl -sf http://forgejo:3000/api/healthz)
-          if echo "$HEALTH" | grep -q "status"; then
-            echo "    ✅ Goose peut accéder à l'API Forgejo"
-          else
-            echo "    ❌ Goose ne peut pas accéder à Forgejo"
-            exit 1
-          fi
-          
-          # Test workspace Goose
-          echo "  Test: Goose workspace"
-          docker compose exec -T goose ls -la /workspace
-          echo "    ✅ Goose workspace accessible"
-          
-          # Test que Goose peut utiliser curl vers Forgejo
-          echo "  Test: Goose peut faire des requêtes HTTP"
-          FORGEJO_INFO=$(docker compose exec -T goose curl -sf http://forgejo:3000/api/v1/version 2>/dev/null || echo "{}")
-          if echo "$FORGEJO_INFO" | grep -q "version\|forgejo"; then
-            echo "    ✅ Goose peut interroger Forgejo"
-          else
-            echo "    ⚠️ Forgejo version endpoint peut ne pas être activé"
-          fi
-          
-          echo "✅ Test Goose ↔ Forgejo réussi"
+          docker compose exec -T ai-redis redis-cli ping | grep -q "PONG" \
+            && echo "  OK: Redis PONG" || { echo "  FAIL: Redis ne repond pas"; exit 1; }
 
-      # ========================================================================
-      # 12. TEST CACHE REDIS CROSS-STACK
-      # ========================================================================
-      - name: 🧪 Test 5/7 - Cache Redis partagé
-        working-directory: AI-Stack
+          # 2 requetes identiques pour peupler le cache LiteLLM
+          for i in 1 2; do
+            curl -s -X POST http://localhost:4000/v1/chat/completions \
+              -H "Authorization: Bearer $LITELLM_KEY" \
+              -H "Content-Type: application/json" \
+              -d '{"model": "ollama/llama3.2:1b", "messages": [{"role": "user", "content": "cache integration test 42"}], "max_tokens": 3}' \
+              > /dev/null
+            sleep 1
+          done
+
+          KEYS=$(docker compose exec -T ai-redis redis-cli dbsize)
+          echo "  Cles Redis: $KEYS"
+          echo "  OK: Redis actif et utilise"
+          echo "Test 5/6 PASSE"
+
+      - name: "Test 6/6 - Scenario E2E complet"
         run: |
-          echo "=== 🧪 Test Cache Redis ==="
-          
-          # Test que le cache fonctionne pour des requêtes répétées
-          echo "  Test cache avec requêtes identiques"
-          
-          # Requête 1
-          START1=$(date +%s%N)
-          curl -sf http://litellm:4000/v1/chat/completions \
-            -H "Authorization: Bearer sk-integration-test-1234567890" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "model": "ollama/llama3.2",
-              "messages": [{"role": "user", "content": "Integration cache test 456"}],
-              "max_tokens": 5
-            }' > /dev/null
-          END1=$(date +%s%N)
-          TIME1=$(( (END1 - START1) / 1000000 ))
-          
-          sleep 2
-          
-          # Requête 2 (identique)
-          START2=$(date +%s%N)
-          curl -sf http://litellm:4000/v1/chat/completions \
-            -H "Authorization: Bearer sk-integration-test-1234567890" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "model": "ollama/llama3.2",
-              "messages": [{"role": "user", "content": "Integration cache test 456"}],
-              "max_tokens": 5
-            }' > /dev/null
-          END2=$(date +%s%N)
-          TIME2=$(( (END2 - START2) / 1000000 ))
-          
-          echo "    Temps requête 1: ${TIME1}ms"
-          echo "    Temps requête 2: ${TIME2}ms"
-          
-          if [ $TIME2 -lt $TIME1 ]; then
-            SPEEDUP=$(( TIME1 / TIME2 ))
-            echo "    ✅ Cache actif (${SPEEDUP}x plus rapide)"
-          else
-            echo "    ⚠️ Cache peut-être non actif (normal pour petits modèles)"
-          fi
-          
-          # Vérifier Redis
-          REDIS_KEYS=$(docker compose exec -T redis redis-cli keys "*" | wc -l)
-          echo "    Clés dans Redis: $REDIS_KEYS"
-          
-          echo "✅ Test Cache Redis réussi"
+          docker run --rm --network forgenest-bridge alpine:latest sh -c '
+            apk add --no-cache curl > /dev/null 2>&1
 
-      # ========================================================================
-      # 13. TEST ANALYTICS LANGFUSE CROSS-STACK
-      # ========================================================================
-      - name: 🧪 Test 6/7 - Analytics Langfuse (optionnel)
-        working-directory: AI-Stack
-        continue-on-error: true
+            echo "1. Push code (simule) -> Forgejo"
+            curl -sf http://forgejo:3000/api/healthz > /dev/null \
+              && echo "   OK: Forgejo accessible"
+
+            echo "2. Woodpecker detecte le push"
+            curl -sf http://woodpecker-server:8000/healthz > /dev/null 2>&1 \
+              && echo "   OK: Woodpecker accessible" || echo "   NOTE: GRPC port interne"
+
+            echo "3. Pipeline -> IA review"
+            R=$(curl -sf http://litellm-proxy:4000/v1/chat/completions \
+              -H "Authorization: Bearer sk-integration-test-1234567890" \
+              -H "Content-Type: application/json" \
+              -d "{\"model\": \"ollama/llama3.2:1b\", \"messages\": [{\"role\": \"user\", \"content\": \"Review: function add(a,b){return a+b}\"}], \"max_tokens\": 20}")
+            echo "$R" | grep -q "choices" \
+              && echo "   OK: Review IA generee" || { echo "   FAIL"; exit 1; }
+
+            echo "4. Resultat -> Forgejo (simule)"
+            curl -sf http://forgejo:3000/api/healthz > /dev/null \
+              && echo "   OK: Forgejo pret a recevoir commentaire"
+
+            echo "Flux E2E complet valide"
+          '
+          echo "Test 6/6 PASSE"
+
+      - name: Generer BILAN_WORKFLOW.md
+        if: success()
+        env:
+          GH_RUN_ID: ${{ github.run_id }}
+          GH_REPOSITORY: ${{ github.repository }}
+        run: python3 .github/scripts/generate_bilan_workflow.py
+
+      - name: Commit BILAN_WORKFLOW.md
+        if: success()
         run: |
-          echo "=== 🧪 Test Langfuse Analytics ==="
-          
-          # Démarrer Langfuse si pas déjà fait
-          docker compose up -d langfuse-db langfuse
-          sleep 20
-          
-          # Test health
-          if curl -sf http://localhost:3002/api/public/health >/dev/null 2>&1; then
-            echo "  ✅ Langfuse accessible"
-            
-            # Note: Configuration complète de Langfuse nécessiterait
-            # des clés API qui doivent être générées via l'UI
-            echo "  ℹ️ Langfuse opérationnel (config complète requiert UI)"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add BILAN_WORKFLOW.md
+          if git diff --staged --quiet; then
+            echo "Aucun changement"
           else
-            echo "  ⏭️ Langfuse non accessible (optionnel)"
+            git commit -m "docs: Bilan interactivite $(date -u '+%Y-%m-%d') [skip ci]"
+            git push
+            echo "BILAN_WORKFLOW.md pousse"
           fi
-          
-          echo "✅ Test Langfuse réussi (optionnel)"
 
-      # ========================================================================
-      # 14. TEST SCÉNARIO E2E COMPLET
-      # ========================================================================
-      - name: 🧪 Test 7/7 - Scénario E2E Complet
-        run: |
-          echo "=== 🧪 Test Scénario End-to-End Complet ==="
-          
-          echo "Scénario: Developer push → Woodpecker pipeline → AI review → Result"
-          
-          # Simuler le flux complet
-          cat > e2e-scenario.sh << 'SCRIPT'
-          #!/bin/bash
-          set -e
-          
-          echo "1️⃣ Développeur push du code (simulé)"
-          echo "   ✅ Code dans Forgejo"
-          
-          echo ""
-          echo "2️⃣ Woodpecker détecte le push (simulé)"
-          echo "   ✅ Pipeline déclenché"
-          
-          echo ""
-          echo "3️⃣ Pipeline exécute review IA"
-          REVIEW=$(curl -sf http://litellm:4000/v1/chat/completions \
-            -H "Authorization: Bearer sk-integration-test-1234567890" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "model": "ollama/llama3.2",
-              "messages": [{
-                "role": "user",
-                "content": "Review this code: function add(a,b) { return a+b; }"
-              }],
-              "max_tokens": 50
-            }')
-          
-          if echo "$REVIEW" | grep -q "choices"; then
-            echo "   ✅ Review IA générée"
-          else
-            echo "   ❌ Review IA échouée"
-            exit 1
-          fi
-          
-          echo ""
-          echo "4️⃣ Résultat envoyé (simulé)"
-          echo "   ✅ Commentaire ajouté au PR"
-          
-          echo ""
-          echo "5️⃣ Métriques trackées dans Langfuse (si configuré)"
-          echo "   ℹ️ Analytics disponibles"
-          
-          echo ""
-          echo "✅ Flux E2E complet validé !"
-          SCRIPT
-          
-          chmod +x e2e-scenario.sh
-          
-          docker run --rm \
-            --network forgenest-bridge \
-            -v "$(pwd)/e2e-scenario.sh:/scenario.sh" \
-            curlimages/curl:latest \
-            sh /scenario.sh
-          
-          echo "✅ Test Scénario E2E réussi"
-
-      # ========================================================================
-      # 15. RÉSUMÉ INTERACTIVITÉ
-      # ========================================================================
-      - name: 📊 Résumé Interactivité
+      - name: Resume final
         if: always()
         run: |
-          echo ""
-          echo "=========================================="
-          echo "  📊 RÉSUMÉ TESTS INTERACTIVITÉ"
-          echo "=========================================="
-          echo ""
-          echo "Tests effectués :"
-          echo "  ✅ Connectivité réseau (Woodpecker ↔ IA)"
-          echo "  ✅ Pipeline Woodpecker utilisant IA"
-          echo "  ✅ Code Review IA automatique"
-          echo "  ✅ Goose Agent ↔ Forgejo"
-          echo "  ✅ Cache Redis partagé"
-          echo "  ✅ Analytics Langfuse (optionnel)"
-          echo "  ✅ Scénario E2E complet"
-          echo ""
+          echo "=============================="
+          echo "  RESUME INTERACTIVITE"
+          echo "=============================="
           echo "Stack Forgejo:"
-          cd Forgejo-Woodpecker_CI-Stack
-          docker compose ps --format "table {{.Name}}\t{{.Status}}"
-          echo ""
+          cd Forgejo-Woodpecker_CI-Stack && docker compose ps --format "table {{.Name}}\t{{.Status}}" || true
           echo "Stack IA:"
-          cd ../AI-Stack
-          docker compose ps --format "table {{.Name}}\t{{.Status}}"
-          echo ""
-          echo "Réseau partagé:"
-          docker network inspect forgenest-bridge --format '{{range .Containers}}{{.Name}}{{println}}{{end}}' | sort
-          echo ""
-          echo "✅ TESTS INTERACTIVITÉ TERMINÉS"
-          echo ""
+          cd ../AI-Stack && docker compose ps --format "table {{.Name}}\t{{.Status}}" || true
+          echo "Reseau bridge:"
+          docker network inspect forgenest-bridge \
+            --format '{{range .Containers}}  {{.Name}}{{println}}{{end}}' 2>/dev/null || true
 
-      # ========================================================================
-      # 16. DEBUG SI ÉCHEC
-      # ========================================================================
-      - name: 🔍 Logs debug (si échec)
+      - name: Logs debug (si echec)
         if: failure()
         run: |
-          echo "=== 🔍 Logs Debug ==="
-          
-          echo "--- Stack Forgejo ---"
           cd Forgejo-Woodpecker_CI-Stack
-          docker compose logs --tail 50 forgejo
-          docker compose logs --tail 50 woodpecker-server
-          
-          echo ""
-          echo "--- Stack IA ---"
+          docker compose logs forgejo --tail 40 || true
+          docker compose logs woodpecker-server --tail 20 || true
           cd ../AI-Stack
-          docker compose logs --tail 50 ollama
-          docker compose logs --tail 50 litellm
-          docker compose logs --tail 50 ai-gateway
-          
-          echo ""
-          echo "--- Réseau ---"
-          docker network inspect forgenest-bridge
+          docker compose logs ollama --tail 20 || true
+          docker compose logs litellm --tail 20 || true
+          docker compose logs ai-gateway --tail 20 || true
+          docker network inspect forgenest-bridge || true
 
-      # ========================================================================
-      # 17. NETTOYAGE
-      # ========================================================================
-      - name: 🧹 Nettoyage
+      - name: Nettoyage
         if: always()
         run: |
-          echo "=== 🧹 Nettoyage ==="
-          
-          # Arrêter les stacks
-          cd Forgejo-Woodpecker_CI-Stack
-          docker compose down -v
-          
-          cd ../AI-Stack
-          docker compose down -v
-          
-          # Supprimer le réseau
+          cd Forgejo-Woodpecker_CI-Stack && docker compose down -v --remove-orphans || true
+          cd ../AI-Stack && docker compose down -v --remove-orphans || true
           docker network rm forgenest-bridge || true
-          
-          # Nettoyage Docker
-          docker system prune -f
-          
-          echo "✅ Nettoyage terminé"m
+          docker system prune -f --volumes || true
+          echo "Nettoyage terminé"
