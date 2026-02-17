@@ -86,9 +86,20 @@ jobs:
             > .env
           echo "Stack IA configuree"
 
+      - name: Pre-pull image Forgejo (retries - codeberg.org peut etre lent)
+        run: |
+          echo "Pull codeberg.org/forgejo/forgejo:14 avec retries..."
+          for i in 1 2 3 4 5; do
+            docker pull codeberg.org/forgejo/forgejo:14 && echo "Pull OK tentative $i" && break
+            echo "Tentative $i/5 echouee, attente 15s..."
+            sleep 15
+          done
+          docker image inspect codeberg.org/forgejo/forgejo:14 > /dev/null 2>&1 \
+            || { echo "Image Forgejo indisponible apres 5 tentatives"; exit 1; }
+
       - name: Build images custom Forgejo
         working-directory: Forgejo-Woodpecker_CI-Stack
-        run: docker compose build --no-cache
+        run: docker compose build
 
       - name: Build images custom IA
         working-directory: AI-Stack
@@ -378,4 +389,4 @@ jobs:
           cd ../AI-Stack && docker compose down -v --remove-orphans || true
           docker network rm forgenest-bridge || true
           docker system prune -f --volumes || true
-          echo "Nettoyage terminé"
+          echo "Nettoyage termine"
