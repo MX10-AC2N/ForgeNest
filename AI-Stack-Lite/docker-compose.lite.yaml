@@ -116,6 +116,7 @@ services:
       - "${LLAMACPP_PARALLEL:-2}"
       - "--cont-batching"
       - "--flash-attn"
+      - "auto"
     ports:
       - "${LLAMACPP_PORT:-8081}:8080"
     volumes:
