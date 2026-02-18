@@ -8,7 +8,7 @@ on:
         required: false
         default: ""
       model_file:
-        description: "Fichier GGUF (laisser vide = SmolLM2-135M-Instruct-Q4_K_M.gguf)"
+        description: "Fichier GGUF (laisser vide = SmolLM2-135M-Instruct-Q5_K_M.gguf)"
         required: false
         default: ""
 
@@ -20,7 +20,7 @@ env:
   # Modèle CI : SmolLM2-135M — ~80 MB, répond en <5s sur CPU
   # Suffisant pour valider toute la chaîne sans saturer le runner
   CI_MODEL_REPO: bartowski/smollm2-135M-instruct-GGUF
-  CI_MODEL_FILE: smollm2-135m-instruct-q4_k_m.gguf
+  CI_MODEL_FILE: smollm2-135m-instruct-q5_k_m.gguf
 
 jobs:
   test-ai-stack-lite:
