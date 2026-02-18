@@ -93,7 +93,7 @@ services:
   # ✅ API compatible OpenAI /v1/chat/completions
   # ============================================================================
   llama-cpp:
-    image: ghcr.io/ggerganov/llama.cpp:server
+    image: ghcr.io/ggml-org/llama.cpp:server
     container_name: ai-lite-llama-cpp
     restart: unless-stopped
     depends_on:
