@@ -1,15 +1,15 @@
-# ==> ForgeNest <==
+# ForgeNest
 **The Autonomous Dev Nest – Code, Cache, Conquer** 🚀
 
-[![Déploiement & Tests Forgejo + Woodpecker](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/check-stack-forgejo.yml/badge.svg)](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/check-stack-forgejo.yml)
-[![Test AI Stack](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/test-ai-stack.yml/badge.svg)](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/test-ai-stack.yml)
+[![Test Déploiement Racine](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/test-deploy.yml/badge.svg)](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/test-deploy.yml)
 [![Test AI Stack Lite](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/test-ai-stack-lite.yml/badge.svg)](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/test-ai-stack-lite.yml)
-[![Test Interactivité 2 Stacks](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/test-interactivity.yml/badge.svg)](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/test-interactivity.yml)
+[![Test AI Stack Full](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/test-ai-stack.yml/badge.svg)](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/test-ai-stack.yml)
+[![Forgejo + Woodpecker](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/check-stack-forgejo.yml/badge.svg)](https://github.com/MX10-AC2N/ForgeNest/actions/workflows/check-stack-forgejo.yml)
 [![Docker Compose](https://img.shields.io/badge/docker--compose-v2.20+-blue)](https://docs.docker.com/compose/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-Votre forge de développement privée, autonome et souveraine.
-Git auto-hébergé, CI/CD, IA locale, observabilité — tout en un, déployé en 5 minutes.
+Votre forge de développement privée, autonome et souveraine.  
+Git auto-hébergé, CI/CD et IA locale — tout en un, déployé en 5 minutes.
 
 > Évolution de [Forgejo-Woodpecker-Docker](https://github.com/MX10-AC2N/Forgejo-Woodpecker-Docker).
 
@@ -17,86 +17,46 @@ Git auto-hébergé, CI/CD, IA locale, observabilité — tout en un, déployé e
 
 ## 🗺️ Vue d'ensemble
 
-ForgeNest propose **3 modes de déploiement** selon votre matériel :
+ForgeNest propose **2 configurations**. Les deux incluent toujours **Forgejo + Woodpecker CI/CD** — seule la partie IA change :
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              ForgeNest                                      │
-│                                                                             │
-│  ┌──────────────────────────┐   ┌──────────────┐   ┌────────────────────┐  │
-│  │  Forgejo-Woodpecker_CI   │   │  AI-Stack    │   │  AI-Stack-Lite ⭐  │  │
-│  │  (toutes configs)        │   │  (Full)      │   │  (Homeserver)      │  │
-│  │                          │   │              │   │                    │  │
-│  │  🦊 Forgejo   :5333      │   │  🧠 Ollama   │   │  ⚙️  llama.cpp     │  │
-│  │  🪵 Woodpecker :5444     │   │  📊 Langfuse │   │  ⚡ LiteLLM  :4000 │  │
-│  │  🤖 WP Agent             │   │  🎨 WebUI    │   │  🌐 Gateway  :8000 │  │
-│  │                          │   │  🌐 Gateway  │   │  🎨 WebUI    :3000 │  │
-│  │  RAM : ~1 GB             │   │  🦆 Goose    │   │                    │  │
-│  │                          │   │  ...         │   │  RAM : 2.5–5.6 GB  │  │
-│  │                          │   │  RAM : ~20GB │   │  ZimaBoard / NAS   │  │
-│  └──────────┬───────────────┘   └──────┬───────┘   └─────────┬──────────┘  │
-│             │                          │                      │             │
-│             └──────────────────────────┴──────────────────────┘             │
-│                           forgenest-bridge                                  │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                             ForgeNest                                    │
+│                                                                          │
+│          Forgejo + Woodpecker CI/CD  (commun aux 2 modes)                │
+│   ┌────────────────────────────────────────────────────────────────┐     │
+│   │   🦊 Forgejo :5333      🪵 Woodpecker :5444      🤖 Agent     │     │
+│   └──────────────────────────────┬─────────────────────────────────┘     │
+│                                  │ forgenest-bridge                      │
+│               ┌──────────────────┴──────────────────┐                   │
+│               │                                     │                   │
+│  ┌────────────▼──────────┐           ┌──────────────▼────────────────┐  │
+│  │   ForgeNest Full      │           │   ForgeNest Lite  ⭐           │  │
+│  │                       │           │                               │  │
+│  │  🧠 Ollama            │           │  ⚙️  llama.cpp  :8081         │  │
+│  │  ⚡ LiteLLM   :4000   │           │  ⚡ LiteLLM    :4000          │  │
+│  │  🌐 AI Gateway :8000  │           │  🌐 AI Gateway :8000          │  │
+│  │  🎨 Open WebUI :3001  │           │  🎨 Open WebUI :3000          │  │
+│  │  📊 Langfuse   :3002  │           │                               │  │
+│  │  🦆 Goose · Tabby     │           │  RAM : 4–6 GB                 │  │
+│  │  🔍 Perplexica :3003  │           │  ZimaBoard · NAS · N100       │  │
+│  │  RAM : ~20 GB         │           │                               │  │
+│  └───────────────────────┘           └───────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
-| Mode | Stacks incluses | RAM | Cible |
-|------|----------------|-----|-------|
-| **[1] Full** | CI/CD + AI-Stack complète | ~20 GB | Serveur dédié |
-| **[2] Lite** ⭐ | AI-Stack-Lite seule | 2.5–5.6 GB | ZimaBoard, NAS, N100 |
-| **[3] CI + Lite** | CI/CD + AI-Stack-Lite | ~6 GB | Homeserver polyvalent |
+| Mode | Compose | RAM totale | Cible |
+|------|---------|-----------|-------|
+| **Full** | `docker-compose.yml` | ~20 GB | Serveur dédié, workstation |
+| **Lite** ⭐ | `docker-compose.lite.yaml` | 4–6 GB | ZimaBoard, NAS, Mini-PC N100 |
 
 ### Ce que ça permet concrètement
 
-- **Push du code → Woodpecker déclenche un pipeline → L'IA review le code automatiquement**
-- **Goose (agent autonome) peut ouvrir des PRs, créer des issues, commiter du code**
-- **LiteLLM cache les réponses IA dans Redis** — les requêtes répétées sont instantanées
-- **Langfuse trace toutes les interactions IA** — coût, latence, qualité au fil du temps
+- **Push → Woodpecker pipeline → review IA automatique** sur chaque commit
+- **LiteLLM cache les réponses dans Redis** — requêtes répétées instantanées
+- **Goose** (Full) peut ouvrir des PRs, créer des issues, écrire du code de façon autonome
+- **Langfuse** (Full) trace toutes les interactions IA — coût, latence, qualité
 - **100% auto-hébergé** — aucune donnée ne quitte votre infrastructure
-
----
-
-## 🏗️ Architecture détaillée
-
-### Stack 1 — Forgejo + Woodpecker CI
-
-| Service | Port | Rôle |
-|---------|------|------|
-| 🦊 **Forgejo** | 5333 (HTTP) / 5222 (SSH) | Forge Git auto-hébergée (type GitHub/GitLab) |
-| 🪵 **Woodpecker Server** | 5444 | Orchestrateur CI/CD + interface web |
-| 🤖 **Woodpecker Agent** | — | Exécuteur de pipelines (Docker-in-Docker) |
-
-**Particularité :** OAuth entre Forgejo et Woodpecker est **entièrement automatisé** via `first-run-init.sh`. Zéro clic manuel, zéro configuration post-démarrage.
-
-### Stack 2 — AI Stack
-
-| Service | Port | Rôle |
-|---------|------|------|
-| 🧠 **Ollama** | 11434 | Inférence LLM 100% locale (llama3.2, codellama…) |
-| ⚡ **LiteLLM Proxy** | 4000 | Gateway OpenAI-compatible + cache Redis + load balancing |
-| 📊 **Langfuse** | 3002 | Observabilité IA (traces, coûts, analytics) |
-| 🎨 **Open WebUI** | 3001 | Interface chat type ChatGPT |
-| 🌐 **AI Gateway** | 8000 | API unifiée multi-providers |
-| 🤖 **Tabby** | 8080 | Autocomplétion de code (plugin IDE) |
-| 🦆 **Goose** | CLI | Agent IA autonome (crée des PRs, écrit du code…) |
-| 💾 **Redis** | 6379 | Cache LiteLLM (requêtes répétées ×10 plus rapides) |
-| 🔍 **Perplexica** | 3003 | Recherche web avec IA (type Perplexity) |
-| 🗄️ **PostgreSQL** | — | Base de données Langfuse |
-| 📦 **ClickHouse** | 8123 | Analytics Langfuse (traces volumineuses) |
-| 🪣 **MinIO** | 9002 | Stockage objets S3-compatible |
-
-### Réseau inter-stacks
-
-Un réseau Docker bridge `forgenest-bridge` connecte les deux stacks :
-
-```
-Woodpecker Agent  →  litellm-proxy:4000   (review IA dans les pipelines)
-Goose Agent       →  forgejo:3000         (API Git depuis l'IA)
-LiteLLM           →  ollama:11434         (inférence locale)
-LiteLLM           →  ai-redis:6379        (cache)
-Langfuse          →  ai-clickhouse:8123   (traces)
-```
 
 ---
 
@@ -106,10 +66,10 @@ Langfuse          →  ai-clickhouse:8123   (traces)
 
 ```
 Docker Engine  ≥ 24.0
-Docker Compose ≥ 2.20
+Docker Compose ≥ 2.20 (plugin V2)
 ```
 
-### Déploiement interactif (recommandé)
+### Installation
 
 ```bash
 git clone https://github.com/MX10-AC2N/ForgeNest.git
@@ -117,85 +77,116 @@ cd ForgeNest
 bash deploy.sh
 ```
 
-Le script détecte votre RAM disponible, vous propose les 3 modes et guide la configuration :
+Le script détecte votre RAM et vous guide :
 
 ```
-Quelle stack souhaitez-vous déployer ?
+  [1] ForgeNest Full
+      Forgejo · Woodpecker CI/CD
+      Ollama · LiteLLM · Langfuse · Open WebUI · AI Gateway · Goose · Tabby …
+      RAM : ~20 GB — Serveur dédié
 
-  [1] Stack Complète  (Full)
-      Forgejo · Woodpecker · Ollama · LiteLLM · Langfuse · ...
-      RAM requise : ~20 GB — Serveur dédié / workstation
+  [2] ForgeNest Lite  ⭐ recommandé homeserver
+      Forgejo · Woodpecker CI/CD
+      llama.cpp · LiteLLM · Open WebUI · AI Gateway
+      RAM : 4–6 GB — ZimaBoard, NAS, Mini-PC N100
 
-  [2] Stack Légère    (Lite) ⭐ recommandée homeserver
-      llama.cpp · LiteLLM · AI Gateway · Open WebUI
-      RAM requise : 2.5–5.6 GB — ZimaBoard, NAS, Mini-PC N100
+  Votre machine : 8 GB RAM → option 2 (Lite) recommandée
 
-  [3] Les deux        (Forgejo+Woodpecker + Stack Lite)
-      CI/CD complet + IA légère sur la même machine
-      RAM requise : ~6 GB
-
-Votre machine : 8 GB RAM → Options 2 ou 3 recommandées
-
-Votre choix [1/2/3/q] :
+  Votre choix [1/2/q] :
 ```
 
-### Déploiement manuel par stack
+### Démarrage direct sans menu
 
 ```bash
-# Stack Complète
-cp .env.example .env && nano .env
-docker compose up -d
-
-# Stack Lite uniquement
-bash AI-Stack-Lite/scripts/deploy.sh
-
-# CI/CD uniquement
-cd Forgejo-Woodpecker_CI-Stack
-cp .env.example .env && docker compose up -d
+./deploy.sh start full    # ForgeNest Full
+./deploy.sh start lite    # ForgeNest Lite
+./deploy.sh stop          # Arrêt propre des stacks actives
+./deploy.sh status        # État de tous les services
+./deploy.sh logs [svc]    # Logs temps réel
 ```
 
-### Accès aux interfaces
+### Déploiement manuel via Docker Compose
 
-**Stack Lite :**
+```bash
+# Mode Full
+cp .env.example .env && nano .env
+docker compose -f docker-compose.yml up -d
 
-| Interface | URL |
-|-----------|-----|
-| 🎨 Open WebUI | http://localhost:3000 |
-| ⚡ LiteLLM | http://localhost:4000 |
-| 🌐 AI Gateway | http://localhost:8000 |
-| ⚙️ llama.cpp | http://localhost:8081 (debug) |
+# Mode Lite
+cp .env.example .env && nano .env
+cp AI-Stack-Lite/.env.lite.example AI-Stack-Lite/.env.lite && nano AI-Stack-Lite/.env.lite
+docker compose -f docker-compose.lite.yaml up -d
+```
 
-**Stack Complète :**
+---
 
-| Interface | URL |
-|-----------|-----|
-| 🦊 Forgejo | http://localhost:5333 |
-| 🪵 Woodpecker | http://localhost:5444 |
-| 🎨 Open WebUI | http://localhost:3001 |
-| ⚡ LiteLLM | http://localhost:4000 |
-| 📊 Langfuse | http://localhost:3002 |
-| 🌐 AI Gateway | http://localhost:8000 |
-| 🤖 Tabby | http://localhost:8080 |
-| 🔍 Perplexica | http://localhost:3003 |
+## 🌐 Accès aux services
+
+### ForgeNest Lite
+
+| Service | URL | Rôle |
+|---------|-----|------|
+| 🦊 Forgejo | http://localhost:5333 | Forge Git |
+| 🪵 Woodpecker | http://localhost:5444 | CI/CD |
+| 🎨 Open WebUI | http://localhost:3000 | Interface chat |
+| ⚡ LiteLLM | http://localhost:4000 | Proxy IA + cache |
+| 🌐 AI Gateway | http://localhost:8000 | API unifiée multi-providers |
+| ⚙️ llama.cpp | http://localhost:8081 | Inférence directe (debug) |
+
+### ForgeNest Full
+
+| Service | URL | Rôle |
+|---------|-----|------|
+| 🦊 Forgejo | http://localhost:5333 | Forge Git |
+| 🪵 Woodpecker | http://localhost:5444 | CI/CD |
+| 🎨 Open WebUI | http://localhost:3001 | Interface chat |
+| ⚡ LiteLLM | http://localhost:4000 | Proxy IA + cache Redis |
+| 📊 Langfuse | http://localhost:3002 | Observabilité IA |
+| 🌐 AI Gateway | http://localhost:8000 | API unifiée multi-providers |
+| 🤖 Tabby | http://localhost:8080 | Autocomplétion code IDE |
+| 🔍 Perplexica | http://localhost:3003 | Recherche web IA |
 
 ---
 
 ## ⚙️ Configuration
 
-### Secrets à changer obligatoirement
+### Mode Lite — `AI-Stack-Lite/.env.lite`
+
+```ini
+# Modèle IA (défaut : Qwen2.5-1.5B, ~1 GB, fonctionne sur 2 GB RAM libres)
+LLAMACPP_MODEL_REPO=Qwen/Qwen2.5-1.5B-Instruct-GGUF
+LLAMACPP_MODEL_FILE=qwen2.5-1.5b-instruct-q4_k_m.gguf
+
+# Secrets (à changer)
+LITELLM_MASTER_KEY=sk-lite-changeme
+WEBUI_SECRET_KEY=changeme-webui-secret-32chars-min
+
+# APIs cloud gratuites optionnelles (fallback si llama.cpp indisponible)
+GROQ_API_KEY=          # https://console.groq.com/  — ultra-rapide, gratuit
+OPENROUTER_API_KEY=    # https://openrouter.ai/keys — accès multi-modèles
+```
+
+**Modèles recommandés selon la RAM disponible :**
+
+| RAM libre | Modèle | Taille |
+|-----------|--------|--------|
+| 2 GB | `Qwen/Qwen2.5-1.5B-Instruct-GGUF` Q4_K_M | ~1.0 GB |
+| 4 GB | `microsoft/Phi-3.5-mini-instruct-gguf` Q4 | ~2.2 GB |
+| 6 GB | `Qwen/Qwen2.5-3B-Instruct-GGUF` Q4_K_M | ~1.9 GB |
+| 8 GB | `Qwen/Qwen2.5-7B-Instruct-GGUF` Q4_K_M | ~4.7 GB |
+
+### Mode Full — `.env` (secrets à générer)
 
 ```bash
 openssl rand -base64 48   # → WOODPECKER_AGENT_SECRET
 openssl rand -hex 32      # → LITELLM_MASTER_KEY
-openssl rand -base64 32   # → LANGFUSE_DB_PASSWORD, LANGFUSE_NEXTAUTH_SECRET, LANGFUSE_SALT
-openssl rand -hex 32      # → LANGFUSE_ENCRYPTION_KEY (exactement 64 chars hex)
+openssl rand -base64 32   # → LANGFUSE_NEXTAUTH_SECRET, LANGFUSE_SALT
+openssl rand -hex 32      # → LANGFUSE_ENCRYPTION_KEY  (64 chars hex)
 openssl rand -base64 32   # → CLICKHOUSE_PASSWORD, WEBUI_SECRET_KEY
 ```
 
-Variables critiques dans `.env` :
-
 ```ini
-ADMIN_PASSWORD=            # Forgejo admin
+FORGEJO_ADMIN_PASSWORD=
 WOODPECKER_AGENT_SECRET=   # min 48 chars
 LITELLM_MASTER_KEY=
 LANGFUSE_DB_PASSWORD=
@@ -204,89 +195,115 @@ LANGFUSE_ENCRYPTION_KEY=   # 64 chars hex
 LANGFUSE_SALT=
 CLICKHOUSE_PASSWORD=
 WEBUI_SECRET_KEY=
-```
 
-### Profils de configuration Ollama
-
-```ini
-# Profil 8 GB RAM
-OLLAMA_MODELS=llama3.2,nomic-embed-text
-OLLAMA_NUM_CTX=2048
-
-# Profil 16 GB RAM (défaut)
-OLLAMA_MODELS=codellama,llama3.2,nomic-embed-text
-OLLAMA_NUM_CTX=4096
-
-# Profil 32 GB RAM + GPU
-OLLAMA_MODELS=deepseek-coder,qwen2.5-coder,llama3.2,nomic-embed-text
-OLLAMA_NUM_GPU=999
-OLLAMA_NUM_CTX=8192
-```
-
-### Clés API IA externes (optionnelles)
-
-Sans clés : tout fonctionne en local via Ollama.
-Avec clés : LiteLLM route automatiquement vers les providers cloud.
-
-```ini
-GROQ_API_KEY=         # Ultra-rapide, gratuit — https://console.groq.com/
-HUGGINGFACE_API_KEY=  # Gratuit — https://huggingface.co/settings/tokens
-TOGETHER_API_KEY=     # $25 crédits offerts — https://api.together.xyz/
-OPENROUTER_API_KEY=   # Multi-providers — https://openrouter.ai/keys
+# APIs IA externes (optionnelles — Ollama fonctionne sans)
+GROQ_API_KEY=
+OPENROUTER_API_KEY=
 OPENAI_API_KEY=
 ANTHROPIC_API_KEY=
 ```
 
 ---
 
+## 🏗️ Architecture
+
+### Stack commune — Forgejo + Woodpecker
+
+| Service | Port | Rôle |
+|---------|------|------|
+| 🦊 **Forgejo** | 5333 / 5222 SSH | Forge Git auto-hébergée |
+| 🪵 **Woodpecker Server** | 5444 | Orchestrateur CI/CD |
+| 🤖 **Woodpecker Agent** | — | Exécuteur de pipelines |
+
+> OAuth entre Forgejo et Woodpecker est **entièrement automatisé** via `first-run-init.sh`. Zéro configuration manuelle.
+
+### AI-Stack Lite
+
+| Service | Rôle |
+|---------|------|
+| ⚙️ **llama.cpp** | Inférence GGUF, API OpenAI-compatible, CPU-optimisé |
+| ⚡ **LiteLLM** | Proxy unifié llama.cpp + APIs cloud en fallback |
+| 🌐 **AI Gateway** | API multi-providers avec alias `llama_cpp/local` |
+| 🎨 **Open WebUI** | Interface chat connectée à LiteLLM |
+| 💾 **Redis** | Cache LiteLLM |
+
+### AI-Stack Full (services supplémentaires)
+
+| Service | Rôle |
+|---------|------|
+| 🧠 **Ollama** | Inférence GPU/CPU, gestion de modèles simplifiée |
+| 📊 **Langfuse** | Observabilité IA — traces, coûts, analytics |
+| 🦆 **Goose** | Agent IA autonome (PRs, commits, issues) |
+| 🤖 **Tabby** | Autocomplétion de code dans l'IDE |
+| 🔍 **Perplexica** | Recherche web avec IA |
+| 🗄️ **PostgreSQL + ClickHouse** | Bases Langfuse |
+| 🪣 **MinIO** | Stockage objets S3-compatible |
+
+### Réseau inter-stacks (`forgenest-bridge`)
+
+```
+Woodpecker Agent  →  litellm:4000       (review IA dans les pipelines)
+Woodpecker Agent  →  ai-gateway:8000    (appels directs multi-providers)
+LiteLLM           →  llama-cpp:8080     (inférence Lite)
+LiteLLM           →  ollama:11434       (inférence Full)
+LiteLLM           →  redis:6379         (cache)
+```
+
+---
+
 ## 🔬 CI/CD — Workflows GitHub Actions
 
-Les trois workflows valident chaque couche de la stack :
-
-| Workflow | Durée | Tests |
-|----------|-------|-------|
-| [`check-stack-forgejo.yml`](.github/workflows/check-stack-forgejo.yml) | ~8 min | 5/5 — Forgejo + Woodpecker + OAuth |
-| [`test-ai-stack.yml`](.github/workflows/test-ai-stack.yml) | ~15 min | 10/10 — tous les services IA |
-| [`test-interactivity.yml`](.github/workflows/test-interactivity.yml) | ~25 min | 6/6 — communication inter-stacks |
+| Workflow | Déclenché sur | Ce qui est testé |
+|----------|--------------|-----------------|
+| [`test-deploy.yml`](.github/workflows/test-deploy.yml) | push, PR | Lint YAML + démarrage Lite depuis la racine (7 tests) |
+| [`test-ai-stack-lite.yml`](.github/workflows/test-ai-stack-lite.yml) | push, PR | Stack Lite isolée — 8 tests bout-en-bout |
+| [`test-ai-stack.yml`](.github/workflows/test-ai-stack.yml) | manuel | Stack Full — 11 tests |
+| [`check-stack-forgejo.yml`](.github/workflows/check-stack-forgejo.yml) | manuel | Forgejo + Woodpecker + OAuth — 5 tests |
+| [`test-interactivity.yml`](.github/workflows/test-interactivity.yml) | manuel | Interopérabilité inter-stacks |
 
 <details>
-<summary><b>check-stack-forgejo</b> — détail des 5 tests</summary>
+<summary><b>test-deploy</b> — Déploiement depuis la racine (7 tests)</summary>
 
-1. Build des images custom (Forgejo + Woodpecker)
-2. Démarrage et attente Forgejo healthy
-3. Extraction automatique des credentials OAuth depuis les logs
-4. Injection OAuth dans Woodpecker + redémarrage
-5. Tests : health endpoint, UI, OAuth `/authorize`, variables injectées dans le conteneur
+**Job 1 — Lint (rapide, ~30s) :**
+- Validation YAML `docker-compose.yml` via `docker compose config`
+- Validation YAML `docker-compose.lite.yaml` via `docker compose config`
+- Syntaxe bash `deploy.sh`
+
+**Job 2 — Démarrage complet ForgeNest Lite :**
+1. Forgejo répond (HTTP 200/302)
+2. Woodpecker répond (HTTP 200/302)
+3. llama.cpp `/health` → `{"status":"ok"}`
+4. AI Gateway `/health` → providers actifs
+5. AI Gateway inférence via `llama_cpp/local`
+6. LiteLLM → llama.cpp via `local/default`
+7. Open WebUI démarre (HTTP 200/302)
 
 </details>
 
 <details>
-<summary><b>test-ai-stack</b> — détail des 10 tests</summary>
+<summary><b>test-ai-stack-lite</b> — Stack Lite isolée (8 tests)</summary>
 
-1. Redis `ping` → PONG
-2. Langfuse `/api/public/health` → 200
-3. ClickHouse `SELECT version()`
-4. Ollama `/api/tags` contient le modèle chargé
-5. LiteLLM chat completion avec authentification
-6. AI Gateway `/health` → 200
-7. Goose container Up
-8. MinIO `/minio/health/live` → 200
-9. Open WebUI HTTP → 200/302
-10. E2E LiteLLM → Ollama (inférence complète bout-en-bout)
+1. Redis → PONG
+2. llama.cpp `/health` → `{"status":"ok"}`
+3. llama.cpp inférence directe `/v1/chat/completions`
+4. AI Gateway `/health` → providers actifs
+5. AI Gateway `/v1/models` → `llama_cpp` détecté
+6. AI Gateway inférence via `llama_cpp/local`
+7. LiteLLM → llama.cpp via `local/default`
+8. Open WebUI HTTP 200/302
 
 </details>
 
 <details>
-<summary><b>test-interactivity</b> — détail des 6 tests</summary>
+<summary><b>check-stack-forgejo</b> — Forgejo + Woodpecker (5 tests)</summary>
 
-1. Connectivité réseau cross-stack (Woodpecker ↔ tous les services IA)
-2. Appels IA depuis contexte pipeline (Ollama direct + LiteLLM)
-3. Code Review IA automatique via LiteLLM
-4. Goose ↔ Forgejo API (agent peut lire la forge)
-5. Cache Redis actif (LiteLLM → Redis, vérification `DBSIZE`)
-6. Scénario E2E complet : push → pipeline → review IA → résultat
+1. Forgejo health
+2. Woodpecker health
+3. Woodpecker UI
+4. OAuth endpoint (`/authorize`)
+5. Variables OAuth injectées dans Woodpecker
 
-> Après chaque run réussi, [`BILAN_WORKFLOW.md`](BILAN_WORKFLOW.md) est automatiquement commité avec les métriques du run.
+> OAuth Forgejo↔Woodpecker entièrement automatisé via `first-run-init.sh`.
 
 </details>
 
@@ -296,78 +313,55 @@ Les trois workflows valident chaque couche de la stack :
 
 ```
 ForgeNest/
-├── deploy.sh                           # ⭐ Point d'entrée — choix interactif de stack
-├── docker-compose.yml                  # Orchestration Full (include CI + AI-Stack)
-├── .env.example                        # Variables unifiées → copier vers .env
-├── BILAN_WORKFLOW.md                   # Généré auto par CI après chaque run
+├── deploy.sh                          # ⭐ Point d'entrée — menu Full / Lite
+├── docker-compose.yml                 # ForgeNest Full  (CI + AI-Stack Full)
+├── docker-compose.lite.yaml           # ForgeNest Lite  (CI + AI-Stack-Lite)
+├── .env.example                       # Variables CI/CD → copier vers .env
 │
-├── Forgejo-Woodpecker_CI-Stack/
+├── Forgejo-Woodpecker_CI-Stack/       # Stack CI/CD commune aux 2 modes
 │   ├── docker-compose.yml
-│   ├── .env.example
-│   ├── Dockerfile.forgejo              # Image custom + first-run-init.sh
+│   ├── Dockerfile.forgejo
 │   ├── Dockerfile.woodpecker-server
 │   └── scripts/
-│       ├── first-run-init.sh           # OAuth automatique au 1er démarrage
-│       ├── entrypoint-woodpecker-server.sh
-│       └── validate-stack.sh
+│       ├── first-run-init.sh          # OAuth Forgejo↔Woodpecker automatisé
+│       └── entrypoint-woodpecker-server.sh
 │
-├── AI-Stack/                           # Stack complète (Ollama, Langfuse, Tabby…)
+├── AI-Stack/                          # Mode Full — Ollama, Langfuse, Tabby…
 │   ├── docker-compose.yaml
 │   ├── .env.example
 │   ├── ai-gateway/
 │   ├── goose/
 │   ├── litellm/
-│   ├── clickhouse/
 │   └── perplexica/
 │
-├── AI-Stack-Lite/                      # Stack légère (llama.cpp, 2.5–5.6 GB RAM)
+├── AI-Stack-Lite/                     # Mode Lite — llama.cpp, 4–6 GB RAM
 │   ├── docker-compose.lite.yaml
 │   ├── .env.lite.example
-│   ├── ai-gateway/                     # Gateway adapté llama.cpp
+│   ├── ai-gateway/                    # Gateway avec résolution alias llama_cpp/local
 │   ├── litellm/
-│   └── scripts/
-│       └── deploy.sh                   # Déploiement Lite avec sélection modèle
+│   └── scripts/deploy.sh
 │
-└── .github/
-    ├── workflows/
-    │   ├── check-stack-forgejo.yml
-    │   ├── test-ai-stack.yml
-    │   ├── test-ai-stack-lite.yml      # 8 tests automatisés Stack Lite
-    │   └── test-interactivity.yml
-    └── scripts/
-        ├── generate_bilan.py
-        └── generate_bilan_workflow.py
+└── .github/workflows/
+    ├── test-deploy.yml                # ⭐ Lint + démarrage Lite depuis la racine
+    ├── test-ai-stack-lite.yml         # Stack Lite isolée
+    ├── test-ai-stack.yml              # Stack Full (manuel)
+    ├── check-stack-forgejo.yml        # Forgejo + Woodpecker + OAuth (manuel)
+    └── test-interactivity.yml         # Interopérabilité inter-stacks (manuel)
 ```
 
 ---
 
 ## 🔒 Sécurité
 
-- **`.env`** : jamais commité, présent dans `.gitignore`
-- **OAuth** : credentials Woodpecker/Forgejo auto-générés, non exposés dans les logs en clair
-- **Réseau** : Redis, ClickHouse, MinIO liés à `127.0.0.1` (inaccessibles depuis l'extérieur)
-- **Production** : placer un reverse proxy HTTPS devant les services exposés
+- **`.env` et `.env.lite`** : jamais commités (`.gitignore`)
+- **OAuth Forgejo/Woodpecker** : credentials auto-générés, non exposés en clair
+- **Services internes** : Redis, PostgreSQL, ClickHouse non bindés sur l'hôte
+- **Production** : ajouter un reverse proxy HTTPS
 
 ```caddyfile
-# Exemple Caddy
 git.mondomaine.com { reverse_proxy localhost:5333 }
 ci.mondomaine.com  { reverse_proxy localhost:5444 }
-ai.mondomaine.com  { reverse_proxy localhost:3001 }
-```
-
----
-
-## 💾 Backup & restauration
-
-```bash
-# Sauvegarder les volumes Forgejo
-cd Forgejo-Woodpecker_CI-Stack
-./scripts/backup.sh
-
-# Restauration
-docker compose down
-tar xzf backup/forgejo-20240101.tar.gz -C volumes/
-docker compose up -d
+ai.mondomaine.com  { reverse_proxy localhost:3000 }
 ```
 
 ---
@@ -375,51 +369,54 @@ docker compose up -d
 ## 🛠️ Commandes utiles
 
 ```bash
-# État global
-docker compose ps
+# Suivre le téléchargement du modèle (Lite, premier démarrage)
+docker logs -f ai-lite-model-downloader
 
-# Logs temps réel
-docker compose logs -f forgejo
-docker compose logs -f litellm
-docker compose logs -f ollama
+# Tester l'API IA
+curl http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"llama_cpp/local","messages":[{"role":"user","content":"Bonjour !"}],"max_tokens":50}'
 
-# Redémarrer un service
-docker compose restart woodpecker-server
+# Lister les modèles disponibles
+curl http://localhost:4000/v1/models -H "Authorization: Bearer $LITELLM_MASTER_KEY"
 
-# Mettre à jour
-docker compose pull && docker compose up -d
-
-# Goose — session agent IA
-docker exec -it goose goose session
-
-# Ollama — télécharger un modèle
-docker exec ollama ollama pull llama3.2
-
-# LiteLLM — lister les modèles disponibles
-curl http://localhost:4000/v1/models \
-  -H "Authorization: Bearer $LITELLM_MASTER_KEY"
+# Mettre à jour (Lite)
+docker compose -f docker-compose.lite.yaml pull
+docker compose -f docker-compose.lite.yaml up -d
 
 # Nettoyage complet (⚠️ supprime les données)
-docker compose down -v && docker system prune -f
+docker compose -f docker-compose.lite.yaml down -v
+docker system prune -f
 ```
 
 ---
 
 ## 📊 Ressources requises
 
-| Profil | RAM | CPU | Disque |
-|--------|-----|-----|--------|
-| Minimal | 8 GB | 4 cœurs | 30 GB |
-| Standard | 16 GB | 8 cœurs | 60 GB |
-| Haute perf. + GPU | 32 GB | 16 cœurs | 120 GB |
+| Mode | RAM | CPU | Disque |
+|------|-----|-----|--------|
+| **Lite** | 4–6 GB | 2 cœurs | ~15 GB + modèle (1–5 GB) |
+| **Full** | 16–32 GB | 8+ cœurs | 60–120 GB |
 
-> Images Docker seules : ~9-10 GB. Compter +1-4 GB par modèle Ollama.
+---
+
+## 💾 Backup
+
+```bash
+cd Forgejo-Woodpecker_CI-Stack
+./scripts/backup.sh
+
+# Restauration
+docker compose down
+tar xzf backup/forgejo-YYYYMMDD.tar.gz -C volumes/
+docker compose up -d
+```
 
 ---
 
 ## 🤝 Contribution
 
-Issues et PRs bienvenues.
+Issues et PRs bienvenues.  
 Testé sur Ubuntu 22.04/24.04 et macOS (Docker Desktop).
 
 ---
