@@ -1,0 +1,78 @@
+# =============================================================================
+# AI Gateway — Configuration LITE (Homeserver / ZimaBoard)
+# =============================================================================
+# Chargé automatiquement quand CONFIG_FILE=config.lite.yaml dans docker-compose
+#
+# Priorité des providers :
+#   1. llama_cpp  (local, privé, hors-ligne)
+#   2. groq        (cloud gratuit, ultra-rapide  — si GROQ_API_KEY défini)
+#   3. openrouter  (cloud, modèles gratuits      — si OPENROUTER_API_KEY défini)
+#   4. huggingface (cloud gratuit                — si HUGGINGFACE_API_KEY défini)
+#   5. together    (cloud, $25 crédits           — si TOGETHER_API_KEY défini)
+
+providers:
+
+  # ===========================================================================
+  # LLAMA.CPP — Moteur local OpenAI-compatible
+  # Activé automatiquement si LLAMACPP_URL est défini dans les env vars.
+  # La liste de modèles ci-dessous sert de fallback si /v1/models est inaccessible.
+  # ===========================================================================
+  llama_cpp:
+    enabled: true
+    base_url: "http://llama-cpp:8080"  # Surchargé par LLAMACPP_URL si défini
+    models:
+      - "local-model"   # Alias générique — llama.cpp n'a qu'un seul modèle chargé
+
+  # ===========================================================================
+  # GROQ — Cloud gratuit ultra-rapide (désactivé si pas de clé)
+  # Activé automatiquement si GROQ_API_KEY est défini dans les env vars.
+  # ===========================================================================
+  groq:
+    enabled: false   # Activé automatiquement via GROQ_API_KEY
+    base_url: "https://api.groq.com/openai/v1"
+    models:
+      - "llama-3.3-70b-versatile"
+      - "llama-3.1-8b-instant"
+      - "deepseek-r1-distill-llama-70b"
+      - "mixtral-8x7b-32768"
+
+  # ===========================================================================
+  # OPENROUTER — Modèles gratuits (désactivé si pas de clé)
+  # ===========================================================================
+  openrouter:
+    enabled: false   # Activé automatiquement via OPENROUTER_API_KEY
+    base_url: "https://openrouter.ai/api/v1"
+    models:
+      - "meta-llama/llama-3.2-3b-instruct:free"
+      - "google/gemma-2-9b-it:free"
+      - "qwen/qwen-2.5-7b-instruct:free"
+      - "mistralai/mistral-7b-instruct:free"
+
+  # ===========================================================================
+  # HUGGING FACE — Serverless Inference (désactivé si pas de clé)
+  # ===========================================================================
+  huggingface:
+    enabled: false   # Activé automatiquement via HUGGINGFACE_API_KEY
+    base_url: "https://api-inference.huggingface.co/models"
+    models:
+      - "meta-llama/Llama-3.2-3B-Instruct"
+      - "Qwen/Qwen2.5-Coder-32B-Instruct"
+
+  # ===========================================================================
+  # TOGETHER AI — $25 crédits gratuits (désactivé si pas de clé)
+  # ===========================================================================
+  together:
+    enabled: false   # Activé automatiquement via TOGETHER_API_KEY
+    base_url: "https://api.together.xyz/v1"
+    models:
+      - "meta-llama/Llama-3-70b-chat-hf"
+      - "mistralai/Mixtral-8x7B-Instruct-v0.1"
+
+  # ===========================================================================
+  # OLLAMA — Désactivé en mode Lite (remplacé par llama.cpp)
+  # Décommentez et définissez OLLAMA_URL si vous souhaitez réintégrer Ollama
+  # ===========================================================================
+  # ollama:
+  #   enabled: false
+  #   base_url: "http://ollama:11434"
+  #   models: []
