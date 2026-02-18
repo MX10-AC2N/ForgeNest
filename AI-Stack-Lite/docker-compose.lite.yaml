@@ -221,7 +221,7 @@ services:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY:-}
       - TOGETHER_API_KEY=${TOGETHER_API_KEY:-}
-    command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "2"]
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "1"]
     deploy:
       resources:
         limits:
