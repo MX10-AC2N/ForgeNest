@@ -160,11 +160,11 @@ services:
     ports:
       - "${AI_GATEWAY_PORT:-8000}:8000"
     volumes:
-      - ./ai-gateway/config.lite.yaml:/app/config.yaml:ro
+      - ./ai-gateway/config.yaml:/app/config.yaml:ro
     networks:
       - ai-lite-network
     environment:
-      - CONFIG_FILE=config.yaml       # monté depuis config.lite.yaml ci-dessus
+      - CONFIG_FILE=config.yaml       
       - LLAMACPP_URL=http://llama-cpp:8080
       - OLLAMA_URL=                   # désactivé en mode lite
       - GROQ_API_KEY=${GROQ_API_KEY:-}
@@ -207,7 +207,7 @@ services:
     ports:
       - "${LITELLM_PORT:-4000}:4000"
     volumes:
-      - ./litellm/config.lite.yaml:/app/config.yaml:ro
+      - ./litellm/config.yaml:/app/config.yaml:ro
     networks:
       - ai-lite-network
     environment:
