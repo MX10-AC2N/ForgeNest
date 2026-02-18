@@ -6,6 +6,24 @@ name: 🚀 Test Déploiement Racine
 # → on valide le YAML Full + on teste le démarrage complet du mode Lite.
 
 on:
+  push:
+    branches: [main, master, develop]
+    paths:
+      - 'docker-compose.yml'
+      - 'docker-compose.lite.yaml'
+      - 'deploy.sh'
+      - '.env.example'
+      - 'AI-Stack-Lite/**'
+      - 'Forgejo-Woodpecker_CI-Stack/**'
+      - '.github/workflows/test-deploy.yml'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'docker-compose.yml'
+      - 'docker-compose.lite.yaml'
+      - 'deploy.sh'
+      - 'AI-Stack-Lite/**'
+      - 'Forgejo-Woodpecker_CI-Stack/**'
   workflow_dispatch:
 
 permissions:
@@ -33,18 +51,33 @@ jobs:
           echo "Docker  : $(docker --version)"
           echo "Compose : $(docker compose version)"
 
+      - name: ✅ Lint — Préparer les .env pour docker compose config
+        run: |
+          # Les includes résolvent les env_file relatifs à leur project_directory.
+          # Il faut donc créer un .env dans chaque sous-dossier inclus.
+
+          # Racine (root compose)
+          cp .env.example .env
+
+          # Forgejo-Woodpecker_CI-Stack → inclus dans les 2 modes
+          cp Forgejo-Woodpecker_CI-Stack/.env.example Forgejo-Woodpecker_CI-Stack/.env
+
+          # AI-Stack → inclus dans docker-compose.yml (Full)
+          cp AI-Stack/.env.example AI-Stack/.env
+
+          # AI-Stack-Lite → inclus dans docker-compose.lite.yaml (Lite)
+          cp AI-Stack-Lite/.env.lite.example AI-Stack-Lite/.env.lite
+
+          echo "✅ Fichiers .env créés pour le lint"
+
       - name: ✅ Lint — docker-compose.yml (Full)
         run: |
-          # Crée un .env minimal pour que docker compose config ne se plaigne pas
-          cp .env.example .env
           docker compose -f docker-compose.yml config --quiet \
             && echo "✅ docker-compose.yml valide" \
             || { echo "❌ docker-compose.yml invalide"; exit 1; }
 
       - name: ✅ Lint — docker-compose.lite.yaml (Lite)
         run: |
-          cp AI-Stack-Lite/.env.lite.example AI-Stack-Lite/.env.lite 2>/dev/null || \
-            touch AI-Stack-Lite/.env.lite
           docker compose -f docker-compose.lite.yaml config --quiet \
             && echo "✅ docker-compose.lite.yaml valide" \
             || { echo "❌ docker-compose.lite.yaml invalide"; exit 1; }
