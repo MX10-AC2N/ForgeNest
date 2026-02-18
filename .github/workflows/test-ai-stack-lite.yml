@@ -19,7 +19,7 @@ env:
   COMPOSE_PROJECT_NAME: forgenest-ai-lite-test
   # Modèle CI : SmolLM2-135M — ~80 MB, répond en <5s sur CPU
   # Suffisant pour valider toute la chaîne sans saturer le runner
-  CI_MODEL_REPO: HuggingFaceTB/smollm2-135M-instruct-GGUF
+  CI_MODEL_REPO: bartowski/smollm2-135M-instruct-GGUF
   CI_MODEL_FILE: smollm2-135m-instruct-q4_k_m.gguf
 
 jobs:
