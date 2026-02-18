@@ -1,0 +1,298 @@
+services:
+  # ============================================================================
+  # REDIS - Cache léger (128MB vs 512MB en full)
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: ai-lite-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - ${VOLUMES_BASE:-./volumes}/lite/redis:/data
+    networks:
+      - ai-lite-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 192M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  # ============================================================================
+  # MODEL DOWNLOADER - Télécharge le modèle GGUF au premier démarrage
+  # Utilise Hugging Face Hub CLI (plus fiable que wget pour les gros fichiers)
+  # ============================================================================
+  model-downloader:
+    image: python:3.11-slim
+    container_name: ai-lite-model-downloader
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        MODEL_PATH="/models/${LLAMACPP_MODEL_FILE:-qwen2.5-1.5b-instruct-q4_k_m.gguf}"
+
+        if [ -f "$$MODEL_PATH" ]; then
+          echo "✅ Modèle déjà présent : $$MODEL_PATH"
+          exit 0
+        fi
+
+        echo "📦 Installation de huggingface_hub..."
+        pip install -q huggingface_hub
+
+        echo "📥 Téléchargement de ${LLAMACPP_MODEL_REPO:-Qwen/Qwen2.5-1.5B-Instruct-GGUF} / ${LLAMACPP_MODEL_FILE:-qwen2.5-1.5b-instruct-q4_k_m.gguf}..."
+        echo "⏳ Patience, cela peut prendre plusieurs minutes selon la connexion..."
+
+        python3 -c "
+        from huggingface_hub import hf_hub_download
+        import os, shutil
+        path = hf_hub_download(
+            repo_id='${LLAMACPP_MODEL_REPO:-Qwen/Qwen2.5-1.5B-Instruct-GGUF}',
+            filename='${LLAMACPP_MODEL_FILE:-qwen2.5-1.5b-instruct-q4_k_m.gguf}',
+            local_dir='/models/tmp'
+        )
+        dest = '/models/${LLAMACPP_MODEL_FILE:-qwen2.5-1.5b-instruct-q4_k_m.gguf}'
+        shutil.move(path, dest)
+        print(f'✅ Modèle téléchargé : {dest} ({os.path.getsize(dest) // 1024 // 1024} MB)')
+        " || {
+          echo "❌ Téléchargement échoué."
+          echo "👉 Téléchargez manuellement le modèle et placez-le dans : volumes/lite/models/"
+          echo "   Exemple : https://huggingface.co/${LLAMACPP_MODEL_REPO:-Qwen/Qwen2.5-1.5B-Instruct-GGUF}"
+          exit 1
+        }
+    environment:
+      - HF_TOKEN=${HF_TOKEN:-}
+      - LLAMACPP_MODEL_REPO=${LLAMACPP_MODEL_REPO:-Qwen/Qwen2.5-1.5B-Instruct-GGUF}
+      - LLAMACPP_MODEL_FILE=${LLAMACPP_MODEL_FILE:-qwen2.5-1.5b-instruct-q4_k_m.gguf}
+    volumes:
+      - ${VOLUMES_BASE:-./volumes}/lite/models:/models
+    networks:
+      - ai-lite-network
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+
+  # ============================================================================
+  # LLAMA.CPP SERVER - Inférence locale ultra-légère (remplace Ollama)
+  # ✅ Plus efficace sur CPU que Ollama
+  # ✅ Supporte les modèles GGUF (quantifiés = petits et rapides)
+  # ✅ API compatible OpenAI /v1/chat/completions
+  # ============================================================================
+  llama-cpp:
+    image: ghcr.io/ggerganov/llama.cpp:server
+    container_name: ai-lite-llama-cpp
+    restart: unless-stopped
+    depends_on:
+      model-downloader:
+        condition: service_completed_successfully
+    command:
+      - "--model"
+      - "/models/${LLAMACPP_MODEL_FILE:-qwen2.5-1.5b-instruct-q4_k_m.gguf}"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8080"
+      - "--ctx-size"
+      - "${LLAMACPP_CTX:-2048}"
+      - "--threads"
+      - "${LLAMACPP_THREADS:-4}"
+      - "--n-predict"
+      - "${LLAMACPP_MAX_TOKENS:-512}"
+      - "--parallel"
+      - "${LLAMACPP_PARALLEL:-2}"
+      - "--cont-batching"
+      - "--flash-attn"
+    ports:
+      - "${LLAMACPP_PORT:-8081}:8080"
+    volumes:
+      - ${VOLUMES_BASE:-./volumes}/lite/models:/models:ro
+    networks:
+      - ai-lite-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '${LLAMACPP_CPU_LIMIT:-4.0}'
+          memory: ${LLAMACPP_MEMORY_LIMIT:-4G}
+        reservations:
+          cpus: '2.0'
+          memory: 2G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "2"
+
+  # ============================================================================
+  # AI GATEWAY (LITE) - API unifiée multi-providers
+  # Expose llama.cpp + APIs gratuites derrière un seul endpoint OpenAI-compatible.
+  # Utile pour les outils externes (scripts, IDE plugins, agents…) qui veulent
+  # accéder directement sans passer par LiteLLM.
+  # ============================================================================
+  ai-gateway:
+    build:
+      context: ./ai-gateway
+      dockerfile: Dockerfile
+    container_name: ai-lite-gateway
+    restart: unless-stopped
+    depends_on:
+      llama-cpp:
+        condition: service_healthy
+    ports:
+      - "${AI_GATEWAY_PORT:-8000}:8000"
+    volumes:
+      - ./ai-gateway/config.lite.yaml:/app/config.yaml:ro
+    networks:
+      - ai-lite-network
+    environment:
+      - CONFIG_FILE=config.yaml       # monté depuis config.lite.yaml ci-dessus
+      - LLAMACPP_URL=http://llama-cpp:8080
+      - OLLAMA_URL=                   # désactivé en mode lite
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY:-}
+      - TOGETHER_API_KEY=${TOGETHER_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 96M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  # ============================================================================
+  # LITELLM PROXY (LITE) - Gateway unifié sans Langfuse ni DB
+  # Gère le routing entre llama.cpp local ET les APIs gratuites (fallback)
+  # ============================================================================
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: ai-lite-litellm
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      llama-cpp:
+        condition: service_healthy
+    ports:
+      - "${LITELLM_PORT:-4000}:4000"
+    volumes:
+      - ./litellm/config.lite.yaml:/app/config.yaml:ro
+    networks:
+      - ai-lite-network
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-lite-1234}
+      - LITELLM_LOG=WARNING
+      # APIs gratuites (optionnelles, activées si clé présente)
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY:-}
+      - TOGETHER_API_KEY=${TOGETHER_API_KEY:-}
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "2"]
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 384M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  # ============================================================================
+  # OPEN WEBUI - Interface chat (inchangée, c'est l'essentiel)
+  # ============================================================================
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: ai-lite-open-webui
+    restart: unless-stopped
+    depends_on:
+      llama-cpp:
+        condition: service_healthy
+      litellm:
+        condition: service_started
+    ports:
+      - "${WEBUI_PORT:-3000}:8080"
+    volumes:
+      - ${VOLUMES_BASE:-./volumes}/lite/open-webui:/app/backend/data
+    networks:
+      - ai-lite-network
+    environment:
+      # Pointe vers LiteLLM pour tout (llama.cpp + APIs gratuites)
+      - OPENAI_API_BASE_URL=http://litellm:4000/v1
+      - OPENAI_API_KEY=${LITELLM_MASTER_KEY:-sk-lite-1234}
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY:-changeme-lite-secret-key-min-32chars}
+      - WEBUI_AUTH=${WEBUI_AUTH:-true}
+      # RAG activé mais léger
+      - ENABLE_RAG=true
+      - ENABLE_WEB_SEARCH=false   # Désactivé par défaut (consomme des ressources)
+      - RAG_EMBEDDING_MODEL=nomic-embed-text
+      - CHUNK_SIZE=500
+      - CHUNK_OVERLAP=50
+      # Pas de Langfuse en mode lite
+      - ENABLE_TELEMETRY=false
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 768M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "2"
+
+# ============================================================================
+# RÉSEAU
+# ============================================================================
+networks:
+  ai-lite-network:
+    name: ai-lite-network
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.27.0.0/16
