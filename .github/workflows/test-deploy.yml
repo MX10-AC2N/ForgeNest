@@ -1,0 +1,419 @@
+name: 🚀 Test Déploiement Racine
+
+# Valide que les deux modes (Full et Lite) démarrent correctement
+# depuis les fichiers docker-compose à la racine du repo.
+# Le mode Full est trop lourd pour le runner CI (Ollama ~6 GB, Langfuse…)
+# → on valide le YAML Full + on teste le démarrage complet du mode Lite.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  # Modèle ultra-léger pour la CI : ~80 MB, répond en <5s sur CPU
+  CI_MODEL_REPO: bartowski/SmolLM2-135M-Instruct-GGUF
+  CI_MODEL_FILE: SmolLM2-135M-Instruct-Q5_K_M.gguf
+
+jobs:
+  # ============================================================================
+  # JOB 1 — Validation YAML des deux compose files (rapide, ~30s)
+  # ============================================================================
+  lint-compose:
+    name: 🔍 Lint docker-compose
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 📋 Informations système
+        run: |
+          echo "Docker  : $(docker --version)"
+          echo "Compose : $(docker compose version)"
+
+      - name: ✅ Lint — docker-compose.yml (Full)
+        run: |
+          # Crée un .env minimal pour que docker compose config ne se plaigne pas
+          cp .env.example .env
+          docker compose -f docker-compose.yml config --quiet \
+            && echo "✅ docker-compose.yml valide" \
+            || { echo "❌ docker-compose.yml invalide"; exit 1; }
+
+      - name: ✅ Lint — docker-compose.lite.yaml (Lite)
+        run: |
+          cp AI-Stack-Lite/.env.lite.example AI-Stack-Lite/.env.lite 2>/dev/null || \
+            touch AI-Stack-Lite/.env.lite
+          docker compose -f docker-compose.lite.yaml config --quiet \
+            && echo "✅ docker-compose.lite.yaml valide" \
+            || { echo "❌ docker-compose.lite.yaml invalide"; exit 1; }
+
+      - name: ✅ Lint — deploy.sh (syntaxe bash)
+        run: |
+          bash -n deploy.sh && echo "✅ deploy.sh syntaxe OK"
+
+  # ============================================================================
+  # JOB 2 — Démarrage complet ForgeNest Lite depuis la racine
+  # ============================================================================
+  test-lite-from-root:
+    name: 🏠 ForgeNest Lite — démarrage depuis la racine
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: lint-compose
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🐋 Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 📋 Informations système
+        run: |
+          echo "CPU    : $(nproc) cores"
+          echo "RAM    : $(free -h | awk '/^Mem:/{print $2}')"
+          echo "Disk   : $(df -h / | tail -1 | awk '{print $4}') libre"
+          echo "Docker : $(docker --version)"
+          echo "Compose: $(docker compose version)"
+
+      # ── Modèle GGUF (mis en cache entre les runs) ─────────────────────────
+      - name: 📦 Cache modèle GGUF
+        id: cache-model
+        uses: actions/cache@v4
+        with:
+          path: AI-Stack-Lite/volumes/lite/models
+          key: gguf-${{ env.CI_MODEL_REPO }}-${{ env.CI_MODEL_FILE }}
+
+      - name: 📥 Télécharger le modèle (si pas en cache)
+        if: steps.cache-model.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p AI-Stack-Lite/volumes/lite/models
+          pip install -q huggingface_hub
+          python3 - <<EOF
+          from huggingface_hub import hf_hub_download
+          import shutil, os
+          path = hf_hub_download(
+              repo_id="${{ env.CI_MODEL_REPO }}",
+              filename="${{ env.CI_MODEL_FILE }}",
+              local_dir="/tmp/gguf"
+          )
+          dest = "AI-Stack-Lite/volumes/lite/models/${{ env.CI_MODEL_FILE }}"
+          shutil.move(path, dest)
+          print(f"✅ Modèle : {dest} ({os.path.getsize(dest)//1024//1024} MB)")
+          EOF
+
+      - name: 🔍 Vérifier le modèle
+        run: |
+          ls -lh AI-Stack-Lite/volumes/lite/models/
+          test -f "AI-Stack-Lite/volumes/lite/models/${{ env.CI_MODEL_FILE }}" \
+            && echo "✅ Modèle présent" \
+            || { echo "❌ Modèle manquant"; exit 1; }
+
+      # ── Fichiers de configuration ──────────────────────────────────────────
+      - name: ⚙️ Créer .env (CI/CD stack)
+        run: |
+          cat > .env << 'EOF'
+          # Forgejo
+          FORGEJO_DOMAIN=localhost
+          FORGEJO_HTTP_PORT=5333
+          FORGEJO_ROOT_URL=http://localhost:5333/
+          FORGEJO_SSH_PORT=5222
+
+          # Forgejo admin (CI)
+          FORGEJO_ADMIN_USER=ci-admin
+          FORGEJO_ADMIN_PASSWORD=ci-password-test-1234
+          FORGEJO_ADMIN_EMAIL=ci@forgenest.local
+
+          # Woodpecker
+          WOODPECKER_HTTP_PORT=5444
+          WOODPECKER_HOST=http://localhost:5444
+          WOODPECKER_AGENT_SECRET=ci-agent-secret-min-48chars-forgenest-test-ok
+          WOODPECKER_ADMIN=ci-admin
+
+          # OAuth Woodpecker↔Forgejo (valeurs fictives pour CI)
+          WOODPECKER_GITEA_CLIENT=ci-client-id
+          WOODPECKER_GITEA_SECRET=ci-client-secret
+          WOODPECKER_GITEA_URL=http://forgejo:3000
+
+          # Réseau
+          FORGEJO_NETWORK_SUBNET=172.25.0.0/16
+          EOF
+          echo "✅ .env créé"
+
+      - name: ⚙️ Créer AI-Stack-Lite/.env.lite
+        run: |
+          cat > AI-Stack-Lite/.env.lite << EOF
+          # Ports
+          WEBUI_PORT=3000
+          LITELLM_PORT=4000
+          AI_GATEWAY_PORT=8000
+          LLAMACPP_PORT=8081
+
+          # Modèle CI (SmolLM2-135M, déjà téléchargé)
+          LLAMACPP_MODEL_REPO=${{ env.CI_MODEL_REPO }}
+          LLAMACPP_MODEL_FILE=${{ env.CI_MODEL_FILE }}
+          HF_TOKEN=
+
+          # Performances CI (runner 2 cores, ~7 GB RAM)
+          LLAMACPP_THREADS=2
+          LLAMACPP_CTX=512
+          LLAMACPP_PARALLEL=1
+          LLAMACPP_MAX_TOKENS=64
+          LLAMACPP_CPU_LIMIT=2.0
+          LLAMACPP_MEMORY_LIMIT=2G
+
+          # Auth
+          LITELLM_MASTER_KEY=sk-lite-ci-test-1234
+          WEBUI_SECRET_KEY=ci-webui-secret-key-32chars-minimum
+          WEBUI_AUTH=false
+
+          # APIs externes désactivées en CI
+          GROQ_API_KEY=
+          OPENROUTER_API_KEY=
+          HUGGINGFACE_API_KEY=
+          TOGETHER_API_KEY=
+
+          # Volumes (le modèle est déjà présent)
+          VOLUMES_BASE=./volumes
+          EOF
+          echo "✅ .env.lite créé"
+
+      # ── Build ──────────────────────────────────────────────────────────────
+      - name: 🔨 Build image AI Gateway
+        run: |
+          docker compose -f docker-compose.lite.yaml \
+            build --no-cache ai-gateway
+          echo "✅ ai-gateway buildé"
+
+      # ── Démarrage ─────────────────────────────────────────────────────────
+      - name: 🚀 Démarrer ForgeNest Lite (depuis la racine)
+        run: |
+          # On démarre tout sauf open-webui pour accélérer les tests principaux
+          docker compose -f docker-compose.lite.yaml up -d \
+            forgejo \
+            woodpecker-server \
+            woodpecker-agent \
+            redis \
+            model-downloader \
+            llama-cpp \
+            ai-gateway \
+            litellm
+
+      # ── Attentes ──────────────────────────────────────────────────────────
+      - name: ⏳ Attendre Forgejo
+        run: |
+          echo "→ Forgejo..."
+          timeout 120s sh -c '
+            until curl -sf -o /dev/null http://localhost:5333; do
+              echo "  ⏳ Attente Forgejo..."
+              sleep 5
+            done
+          ' && echo "✅ Forgejo prêt" || {
+            docker compose -f docker-compose.lite.yaml logs forgejo --tail 30
+            exit 1
+          }
+
+      - name: ⏳ Attendre llama.cpp
+        run: |
+          echo "→ llama.cpp (chargement modèle)..."
+          timeout 180s sh -c '
+            until curl -sf http://localhost:8081/health > /dev/null 2>&1; do
+              echo "  ⏳ Attente llama.cpp..."
+              sleep 5
+            done
+          ' && echo "✅ llama.cpp prêt" || {
+            docker compose -f docker-compose.lite.yaml logs llama-cpp --tail 40
+            exit 1
+          }
+
+      - name: ⏳ Attendre AI Gateway
+        run: |
+          echo "→ AI Gateway..."
+          timeout 90s sh -c '
+            until curl -sf http://localhost:8000/health > /dev/null 2>&1; do
+              echo "  ⏳ Attente AI Gateway..."
+              sleep 5
+            done
+          ' && echo "✅ AI Gateway prêt" || {
+            docker compose -f docker-compose.lite.yaml logs ai-gateway --tail 40
+            exit 1
+          }
+
+      - name: ⏳ Attendre LiteLLM
+        run: |
+          echo "→ LiteLLM..."
+          timeout 300s sh -c '
+            until curl -sf -o /dev/null \
+              -H "Authorization: Bearer sk-lite-ci-test-1234" \
+              http://localhost:4000/health; do
+              echo "  ⏳ Attente LiteLLM..."
+              sleep 5
+            done
+          ' && echo "✅ LiteLLM prêt" || {
+            docker compose -f docker-compose.lite.yaml logs litellm --tail 40
+            exit 1
+          }
+
+      # ── État ──────────────────────────────────────────────────────────────
+      - name: 📊 État des containers
+        run: docker compose -f docker-compose.lite.yaml ps
+
+      # ── Tests ─────────────────────────────────────────────────────────────
+      - name: 🧪 Test 1/7 — Forgejo répond
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5333)
+          [[ "$STATUS" -eq 200 || "$STATUS" -eq 302 ]] \
+            && echo "✅ Forgejo OK (HTTP $STATUS)" \
+            || { echo "❌ Forgejo KO (HTTP $STATUS)"; exit 1; }
+
+      - name: 🧪 Test 2/7 — Woodpecker répond
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5444)
+          [[ "$STATUS" -eq 200 || "$STATUS" -eq 302 ]] \
+            && echo "✅ Woodpecker OK (HTTP $STATUS)" \
+            || { echo "❌ Woodpecker KO (HTTP $STATUS)"; exit 1; }
+
+      - name: 🧪 Test 3/7 — llama.cpp health
+        run: |
+          RESP=$(curl -sf http://localhost:8081/health)
+          echo "Réponse : $RESP"
+          echo "$RESP" | grep -qi "ok" \
+            && echo "✅ llama.cpp health OK" \
+            || { echo "❌ llama.cpp health KO"; exit 1; }
+
+      - name: 🧪 Test 4/7 — AI Gateway health + providers
+        run: |
+          RESP=$(curl -sf http://localhost:8000/health)
+          echo "Réponse : $RESP"
+          echo "$RESP" | grep -q "providers" \
+            && echo "✅ AI Gateway OK" \
+            || { echo "❌ AI Gateway KO"; exit 1; }
+
+      - name: 🧪 Test 5/7 — AI Gateway inférence via llama_cpp/local
+        run: |
+          RESP=$(curl -sf -X POST http://localhost:8000/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "llama_cpp/local",
+              "messages": [{"role": "user", "content": "Reply with: OK"}],
+              "max_tokens": 10
+            }')
+          echo "Réponse : $RESP"
+          echo "$RESP" | grep -q "choices" \
+            && echo "✅ Inférence AI Gateway OK" \
+            || { echo "❌ Inférence AI Gateway KO"; exit 1; }
+
+      - name: 🧪 Test 6/7 — LiteLLM → llama.cpp
+        run: |
+          RESP=$(curl -sf -X POST http://localhost:4000/v1/chat/completions \
+            -H "Authorization: Bearer sk-lite-ci-test-1234" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "local/default",
+              "messages": [{"role": "user", "content": "Reply with: OK"}],
+              "max_tokens": 10
+            }')
+          echo "Réponse : $RESP"
+          echo "$RESP" | grep -q "choices" \
+            && echo "✅ LiteLLM → llama.cpp OK" \
+            || { echo "❌ LiteLLM → llama.cpp KO"; exit 1; }
+
+      - name: 🧪 Test 7/7 — Open WebUI démarre
+        run: |
+          docker compose -f docker-compose.lite.yaml up -d open-webui
+          echo "Attente Open WebUI (30s)..."
+          sleep 30
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/)
+          [[ "$STATUS" -eq 200 || "$STATUS" -eq 302 ]] \
+            && echo "✅ Open WebUI OK (HTTP $STATUS)" \
+            || { echo "❌ Open WebUI KO (HTTP $STATUS)"; exit 1; }
+
+      # ── Résumé ────────────────────────────────────────────────────────────
+      - name: 📋 Résumé final
+        if: always()
+        run: |
+          echo ""
+          echo "═══════════════════════════════════════════════"
+          echo "       RÉSUMÉ — ForgeNest Lite depuis racine"
+          echo "═══════════════════════════════════════════════"
+          docker compose -f docker-compose.lite.yaml ps
+          echo ""
+
+      # ── Bilan commité ─────────────────────────────────────────────────────
+      - name: 📝 Écrire le bilan dans BILAN_WORKFLOW.md
+        if: success() && github.ref == 'refs/heads/main'
+        env:
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          cat > /tmp/write_bilan.py << 'PYEOF'
+          import os, datetime, re
+
+          run_id  = os.environ.get("GITHUB_RUN_ID", "")
+          repo    = os.environ.get("GITHUB_REPOSITORY", "")
+          now     = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+          run_url = "https://github.com/{}/actions/runs/{}".format(repo, run_id)
+
+          rows = [
+              ("Forgejo demarre",                       "OK"),
+              ("Woodpecker demarre",                    "OK"),
+              ("llama.cpp health",                      "OK"),
+              ("AI Gateway health",                     "OK"),
+              ("AI Gateway inference llama_cpp/local",  "OK"),
+              ("LiteLLM -> llama.cpp",                  "OK"),
+              ("Open WebUI",                            "OK"),
+          ]
+          table = "| Test | Statut |\n|------|--------|\n"
+          for label, status in rows:
+              table += "| {} | {} |\n".format(label, status)
+
+          bilan  = "## Dernier deploiement Lite (racine) -- {}\n\n".format(now)
+          bilan += "Workflow : [{}]({})\n".format(run_id, run_url)
+          bilan += "Compose  : docker-compose.lite.yaml\n"
+          bilan += "Modele CI: SmolLM2-135M-Instruct-Q5_K_M (~80 MB)\n\n"
+          bilan += table
+
+          path = "BILAN_WORKFLOW.md"
+          try:
+              content = open(path).read()
+          except FileNotFoundError:
+              content = "# Bilan Workflows ForgeNest\n\n"
+
+          marker     = "<!-- BILAN_DEPLOY_START -->"
+          marker_end = "<!-- BILAN_DEPLOY_END -->"
+          block      = "{}\n{}\n{}".format(marker, bilan, marker_end)
+
+          if marker in content:
+              content = re.sub(
+                  re.escape(marker) + ".*?" + re.escape(marker_end),
+                  block, content, flags=re.DOTALL
+              )
+          else:
+              content += "\n\n---\n\n{}\n".format(block)
+
+          open(path, "w").write(content)
+          print("Bilan ecrit dans {}".format(path))
+          PYEOF
+          python3 /tmp/write_bilan.py
+
+      - name: 📤 Commit bilan
+        if: success() && github.ref == 'refs/heads/main'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add BILAN_WORKFLOW.md
+          if git diff --staged --quiet; then
+            echo "Aucun changement à commiter"
+          else
+            git commit -m "docs: Bilan déploiement Lite $(date -u '+%Y-%m-%d') [skip ci]"
+            git push
+            echo "✅ Bilan commité"
+          fi
+
+      # ── Nettoyage ─────────────────────────────────────────────────────────
+      - name: 🧹 Nettoyage
+        if: always()
+        run: |
+          docker compose -f docker-compose.lite.yaml down -v --remove-orphans 2>/dev/null || true
+          docker system prune -f --volumes 2>/dev/null || true
+          echo "✅ Nettoyage terminé"
