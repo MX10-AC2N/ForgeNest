@@ -1,0 +1,19 @@
+# Secrets — ne jamais commiter
+.env.lite
+.env
+
+# Volumes Docker (données locales)
+volumes/
+
+# Logs
+*.log
+logs/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# OS
+.DS_Store
+Thumbs.db
