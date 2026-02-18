@@ -171,7 +171,9 @@ jobs:
           # Réseau
           FORGEJO_NETWORK_SUBNET=172.25.0.0/16
           EOF
-          echo "✅ .env créé"
+          # Copier aussi dans Forgejo-Woodpecker_CI-Stack/ (env_file résolu relativement au project_directory)
+          cp .env Forgejo-Woodpecker_CI-Stack/.env
+          echo "✅ .env créé (racine + Forgejo-Woodpecker_CI-Stack/)"
 
       - name: ⚙️ Créer AI-Stack-Lite/.env.lite
         run: |
