@@ -1,0 +1,393 @@
+name: 🏠 Test AI Stack Lite
+
+on:
+  workflow_dispatch:
+    inputs:
+      model_repo:
+        description: "HuggingFace repo du modèle GGUF (laisser vide = SmolLM2-135M pour CI)"
+        required: false
+        default: ""
+      model_file:
+        description: "Fichier GGUF (laisser vide = SmolLM2-135M-Instruct-Q4_K_M.gguf)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+env:
+  COMPOSE_PROJECT_NAME: forgenest-ai-lite-test
+  # Modèle CI : SmolLM2-135M — ~80 MB, répond en <5s sur CPU
+  # Suffisant pour valider toute la chaîne sans saturer le runner
+  CI_MODEL_REPO: HuggingFaceTB/smollm2-135M-instruct-GGUF
+  CI_MODEL_FILE: smollm2-135m-instruct-q4_k_m.gguf
+
+jobs:
+  test-ai-stack-lite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      # -----------------------------------------------------------------------
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🐋 Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # -----------------------------------------------------------------------
+      - name: 📊 Informations système
+        run: |
+          echo "=== 💻 Système ==="
+          echo "CPU    : $(nproc) cores"
+          echo "RAM    : $(free -h | awk '/^Mem:/{print $2}')"
+          echo "Disk   : $(df -h / | tail -1 | awk '{print $4}') libre"
+          echo "Docker : $(docker --version)"
+          echo "Compose: $(docker compose version)"
+
+      # -----------------------------------------------------------------------
+      - name: 📦 Cache modèle GGUF
+        id: cache-model
+        uses: actions/cache@v4
+        with:
+          path: AI-Stack-Lite/volumes/lite/models
+          key: gguf-${{ env.CI_MODEL_REPO }}-${{ env.CI_MODEL_FILE }}
+
+      - name: 📥 Télécharger le modèle GGUF (si pas en cache)
+        if: steps.cache-model.outputs.cache-hit != 'true'
+        run: |
+          MODEL_REPO="${{ inputs.model_repo || env.CI_MODEL_REPO }}"
+          MODEL_FILE="${{ inputs.model_file || env.CI_MODEL_FILE }}"
+
+          mkdir -p AI-Stack-Lite/volumes/lite/models
+          pip install -q huggingface_hub
+
+          echo "📥 Téléchargement : $MODEL_REPO / $MODEL_FILE"
+          python3 - <<EOF
+          from huggingface_hub import hf_hub_download
+          import shutil, os
+          path = hf_hub_download(repo_id="$MODEL_REPO", filename="$MODEL_FILE", local_dir="/tmp/gguf")
+          dest = "AI-Stack-Lite/volumes/lite/models/$MODEL_FILE"
+          shutil.move(path, dest)
+          print(f"✅ Modèle : {dest} ({os.path.getsize(dest)//1024//1024} MB)")
+          EOF
+
+      - name: 🔍 Vérifier le modèle présent
+        run: |
+          MODEL_FILE="${{ inputs.model_file || env.CI_MODEL_FILE }}"
+          ls -lh AI-Stack-Lite/volumes/lite/models/
+          test -f "AI-Stack-Lite/volumes/lite/models/$MODEL_FILE" \
+            && echo "✅ Modèle trouvé : $MODEL_FILE" \
+            || { echo "❌ Modèle manquant"; exit 1; }
+
+      # -----------------------------------------------------------------------
+      - name: ⚙️ Créer .env.lite pour les tests
+        working-directory: AI-Stack-Lite
+        run: |
+          MODEL_FILE="${{ inputs.model_file || env.CI_MODEL_FILE }}"
+          cat > .env.lite << EOF
+          # Ports
+          WEBUI_PORT=3000
+          LITELLM_PORT=4000
+          AI_GATEWAY_PORT=8000
+          LLAMACPP_PORT=8081
+
+          # Modèle — CI utilise SmolLM2-135M
+          LLAMACPP_MODEL_REPO=${{ inputs.model_repo || env.CI_MODEL_REPO }}
+          LLAMACPP_MODEL_FILE=${MODEL_FILE}
+          HF_TOKEN=
+
+          # Performances CI (runner 2 cores, 7 GB RAM)
+          LLAMACPP_THREADS=2
+          LLAMACPP_CTX=512
+          LLAMACPP_PARALLEL=1
+          LLAMACPP_MAX_TOKENS=64
+          LLAMACPP_CPU_LIMIT=2.0
+          LLAMACPP_MEMORY_LIMIT=2G
+
+          # Auth
+          LITELLM_MASTER_KEY=sk-lite-ci-test-1234
+          WEBUI_SECRET_KEY=ci-test-webui-secret-key-32chars-min
+          WEBUI_AUTH=false
+
+          # APIs externes (vides en CI)
+          GROQ_API_KEY=
+          OPENROUTER_API_KEY=
+          HUGGINGFACE_API_KEY=
+          TOGETHER_API_KEY=
+
+          # Volumes — le modèle est déjà là (mis en cache)
+          VOLUMES_BASE=./volumes
+          EOF
+
+          echo "✅ .env.lite créé"
+          grep -v "KEY\|SECRET\|TOKEN" .env.lite
+
+      # -----------------------------------------------------------------------
+      - name: 🔨 Build image AI Gateway
+        working-directory: AI-Stack-Lite
+        run: |
+          docker compose -f docker-compose.lite.yaml --env-file .env.lite \
+            build --no-cache ai-gateway
+          echo "✅ Build ai-gateway OK"
+
+      # -----------------------------------------------------------------------
+      - name: 🚀 Démarrer les services de base (sans Open WebUI)
+        working-directory: AI-Stack-Lite
+        run: |
+          # On démarre le modèle-downloader en dernier pour qu'il trouve
+          # le fichier déjà présent dans le volume et sorte immédiatement
+          docker compose -f docker-compose.lite.yaml --env-file .env.lite up -d \
+            redis \
+            model-downloader \
+            llama-cpp \
+            ai-gateway \
+            litellm
+
+      # -----------------------------------------------------------------------
+      - name: ⏳ Attendre Redis
+        working-directory: AI-Stack-Lite
+        run: |
+          echo "→ Redis..."
+          timeout 60s sh -c "
+            until docker compose -f docker-compose.lite.yaml \
+              --env-file .env.lite ps redis | grep -q '(healthy)'; do
+              sleep 3
+            done
+          " && echo "✅ Redis prêt" || {
+            docker compose -f docker-compose.lite.yaml --env-file .env.lite logs redis --tail 30
+            exit 1
+          }
+
+      - name: ⏳ Attendre llama.cpp (chargement modèle)
+        working-directory: AI-Stack-Lite
+        run: |
+          echo "→ llama.cpp (chargement du modèle en mémoire…)"
+          # SmolLM2-135M se charge en ~10s, on donne 3 min max
+          timeout 180s sh -c "
+            until curl -sf http://localhost:8081/health > /dev/null 2>&1; do
+              echo '  ⏳ Attente llama.cpp...'
+              sleep 5
+            done
+          " && echo "✅ llama.cpp prêt" || {
+            echo "❌ llama.cpp n'a pas démarré"
+            docker compose -f docker-compose.lite.yaml --env-file .env.lite logs llama-cpp --tail 50
+            exit 1
+          }
+
+      - name: ⏳ Attendre AI Gateway
+        working-directory: AI-Stack-Lite
+        run: |
+          echo "→ AI Gateway..."
+          timeout 90s sh -c "
+            until docker compose -f docker-compose.lite.yaml \
+              --env-file .env.lite ps ai-gateway | grep -q '(healthy)'; do
+              sleep 5
+            done
+          " && echo "✅ AI Gateway prêt" || {
+            docker compose -f docker-compose.lite.yaml --env-file .env.lite logs ai-gateway --tail 50
+            exit 1
+          }
+
+      - name: ⏳ Attendre LiteLLM
+        working-directory: AI-Stack-Lite
+        run: |
+          echo "→ LiteLLM..."
+          timeout 120s sh -c "
+            until curl -sf -o /dev/null \
+              -H 'Authorization: Bearer sk-lite-ci-test-1234' \
+              http://localhost:4000/health; do
+              echo '  ⏳ Attente LiteLLM...'
+              sleep 5
+            done
+          " && echo "✅ LiteLLM prêt" || {
+            docker compose -f docker-compose.lite.yaml --env-file .env.lite logs litellm --tail 50
+            exit 1
+          }
+
+      # -----------------------------------------------------------------------
+      - name: 📊 État des containers
+        working-directory: AI-Stack-Lite
+        run: docker compose -f docker-compose.lite.yaml --env-file .env.lite ps
+
+      # -----------------------------------------------------------------------
+      - name: 🧪 Test 1/8 — Redis
+        working-directory: AI-Stack-Lite
+        run: |
+          PONG=$(docker compose -f docker-compose.lite.yaml --env-file .env.lite \
+            exec -T redis redis-cli ping)
+          [[ "$PONG" == "PONG" ]] && echo "✅ Redis — PONG reçu" || { echo "❌ Redis KO"; exit 1; }
+
+      - name: 🧪 Test 2/8 — llama.cpp health
+        run: |
+          RESP=$(curl -sf http://localhost:8081/health)
+          echo "Réponse : $RESP"
+          echo "$RESP" | grep -qi "ok\|{\|status" \
+            && echo "✅ llama.cpp health OK" \
+            || { echo "❌ llama.cpp health KO"; exit 1; }
+
+      - name: 🧪 Test 3/8 — llama.cpp inférence directe
+        run: |
+          MODEL_FILE="${{ inputs.model_file || env.CI_MODEL_FILE }}"
+          RESP=$(curl -sf -X POST http://localhost:8081/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"model\": \"$MODEL_FILE\",
+              \"messages\": [{\"role\": \"user\", \"content\": \"Say: OK\"}],
+              \"max_tokens\": 10
+            }")
+          echo "Réponse : $RESP"
+          echo "$RESP" | grep -q "choices" \
+            && echo "✅ llama.cpp inférence OK" \
+            || { echo "❌ llama.cpp inférence KO"; exit 1; }
+
+      - name: 🧪 Test 4/8 — AI Gateway /health
+        run: |
+          RESP=$(curl -sf http://localhost:8000/health)
+          echo "Réponse : $RESP"
+          echo "$RESP" | grep -q "providers" \
+            && echo "✅ AI Gateway health OK" \
+            || { echo "❌ AI Gateway health KO"; exit 1; }
+
+      - name: 🧪 Test 5/8 — AI Gateway /v1/models (découverte dynamique)
+        run: |
+          RESP=$(curl -sf http://localhost:8000/v1/models)
+          echo "Réponse : $RESP"
+          echo "$RESP" | grep -q "llama_cpp" \
+            && echo "✅ AI Gateway models — llama_cpp détecté" \
+            || { echo "❌ AI Gateway models KO"; exit 1; }
+
+      - name: 🧪 Test 6/8 — AI Gateway inférence via llama.cpp
+        run: |
+          RESP=$(curl -sf -X POST http://localhost:8000/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "llama_cpp/local",
+              "messages": [{"role": "user", "content": "Say: OK"}],
+              "max_tokens": 10
+            }')
+          echo "Réponse : $RESP"
+          echo "$RESP" | grep -q "choices" \
+            && echo "✅ AI Gateway inférence OK" \
+            || { echo "❌ AI Gateway inférence KO"; exit 1; }
+
+      - name: 🧪 Test 7/8 — LiteLLM → llama.cpp
+        run: |
+          RESP=$(curl -sf -X POST http://localhost:4000/v1/chat/completions \
+            -H "Authorization: Bearer sk-lite-ci-test-1234" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "local/default",
+              "messages": [{"role": "user", "content": "Say: OK"}],
+              "max_tokens": 10
+            }')
+          echo "Réponse : $RESP"
+          echo "$RESP" | grep -q "choices" \
+            && echo "✅ LiteLLM → llama.cpp OK" \
+            || { echo "❌ LiteLLM → llama.cpp KO"; exit 1; }
+
+      - name: 🧪 Test 8/8 — Open WebUI démarre
+        working-directory: AI-Stack-Lite
+        run: |
+          docker compose -f docker-compose.lite.yaml --env-file .env.lite up -d open-webui
+          echo "Attente Open WebUI (30s)..."
+          sleep 30
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/)
+          [[ "$STATUS" -eq 200 || "$STATUS" -eq 302 ]] \
+            && echo "✅ Open WebUI OK (HTTP $STATUS)" \
+            || { echo "❌ Open WebUI KO (HTTP $STATUS)"; exit 1; }
+
+      # -----------------------------------------------------------------------
+      - name: 📋 Résumé final
+        if: always()
+        working-directory: AI-Stack-Lite
+        run: |
+          echo ""
+          echo "═══════════════════════════════════════"
+          echo "         RÉSUMÉ STACK LITE"
+          echo "═══════════════════════════════════════"
+          docker compose -f docker-compose.lite.yaml --env-file .env.lite ps
+          echo ""
+          echo "Logs récents llama.cpp :"
+          docker compose -f docker-compose.lite.yaml --env-file .env.lite \
+            logs llama-cpp --tail 10 | grep -v "^#" || true
+
+      # -----------------------------------------------------------------------
+      - name: 📝 Générer et commiter le bilan
+        if: success()
+        env:
+          GH_RUN_ID: ${{ github.run_id }}
+          GH_REPOSITORY: ${{ github.repository }}
+          STACK: lite
+        run: |
+          python3 - <<'PYEOF'
+          import os, datetime, json
+
+          run_id   = os.environ.get("GH_RUN_ID", "")
+          repo     = os.environ.get("GH_REPOSITORY", "")
+          now      = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+          run_url  = f"https://github.com/{repo}/actions/runs/{run_id}"
+
+          bilan = f"""## ✅ Dernier déploiement Stack LITE — {now}
+
+          **Workflow :** [{run_id}]({run_url})
+          **Modèle CI :** SmolLM2-135M-Instruct-Q4_K_M (80 MB)
+
+          | Test | Statut |
+          |------|--------|
+          | Redis | ✅ |
+          | llama.cpp health | ✅ |
+          | llama.cpp inférence | ✅ |
+          | AI Gateway health | ✅ |
+          | AI Gateway /v1/models | ✅ |
+          | AI Gateway inférence | ✅ |
+          | LiteLLM → llama.cpp | ✅ |
+          | Open WebUI | ✅ |
+          """
+
+          md_path = "AI-Stack-Lite/AI-STACK-LITE.md"
+          with open(md_path, "r") as f:
+              content = f.read()
+
+          marker = "<!-- BILAN_START -->"
+          marker_end = "<!-- BILAN_END -->"
+          block = f"{marker}\n{bilan}\n{marker_end}"
+
+          if marker in content:
+              import re
+              content = re.sub(
+                  rf"{re.escape(marker)}.*?{re.escape(marker_end)}",
+                  block, content, flags=re.DOTALL
+              )
+          else:
+              content += f"\n\n---\n\n{block}\n"
+
+          with open(md_path, "w") as f:
+              f.write(content)
+
+          print(f"✅ Bilan écrit dans {md_path}")
+          PYEOF
+
+      - name: 📤 Commit bilan
+        if: success()
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add AI-Stack-Lite/AI-STACK-LITE.md
+          if git diff --staged --quiet; then
+            echo "Aucun changement à commiter"
+          else
+            git commit -m "docs(lite): Bilan déploiement $(date -u '+%Y-%m-%d') [skip ci]"
+            git push
+            echo "✅ Bilan commité"
+          fi
+
+      # -----------------------------------------------------------------------
+      - name: 🧹 Nettoyage
+        if: always()
+        working-directory: AI-Stack-Lite
+        run: |
+          docker compose -f docker-compose.lite.yaml --env-file .env.lite \
+            down -v --remove-orphans 2>/dev/null || true
+          docker system prune -f --volumes 2>/dev/null || true
+          echo "✅ Nettoyage terminé"
