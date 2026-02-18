@@ -193,7 +193,7 @@ jobs:
         working-directory: AI-Stack-Lite
         run: |
           echo "→ LiteLLM..."
-          timeout 120s sh -c "
+          timeout 300s sh -c "
             until curl -sf -o /dev/null \
               -H 'Authorization: Bearer sk-lite-ci-test-1234' \
               http://localhost:4000/health; do
