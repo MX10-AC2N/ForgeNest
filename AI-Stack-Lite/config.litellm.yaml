@@ -1,0 +1,174 @@
+# =============================================================================
+# LiteLLM Configuration - Version LITE (Homeserver / ZimaBoard)
+# =============================================================================
+# Priorité : llama.cpp local → Groq (fallback) → OpenRouter (fallback)
+# Pas de Langfuse, pas de DB, pas de ClickHouse → ultra-léger
+
+model_list:
+  # ===========================================================================
+  # LLAMA.CPP LOCAL — Connexion directe (prioritaire, hors-ligne)
+  # ===========================================================================
+  - model_name: local/default
+    litellm_params:
+      model: openai/local-model
+      api_base: http://llama-cpp:8080/v1
+      api_key: "not-needed"
+    model_info:
+      mode: chat
+      supports_function_calling: false
+
+  - model_name: local/chat
+    litellm_params:
+      model: openai/local-model
+      api_base: http://llama-cpp:8080/v1
+      api_key: "not-needed"
+
+  - model_name: local/code
+    litellm_params:
+      model: openai/local-model
+      api_base: http://llama-cpp:8080/v1
+      api_key: "not-needed"
+
+  # ===========================================================================
+  # AI GATEWAY — Routage unifié via notre gateway custom
+  # Ces entrées permettent à LiteLLM de déléguer à l'AI Gateway,
+  # qui gère lui-même le fallback llama.cpp → cloud.
+  # ===========================================================================
+  - model_name: gateway/local
+    litellm_params:
+      model: openai/llama_cpp/local
+      api_base: http://ai-gateway:8000/v1
+      api_key: "not-needed"
+    model_info:
+      mode: chat
+
+  - model_name: gateway/groq-fast
+    litellm_params:
+      model: openai/groq/llama-3.1-8b-instant
+      api_base: http://ai-gateway:8000/v1
+      api_key: "not-needed"
+    model_info:
+      mode: chat
+
+  - model_name: gateway/groq-large
+    litellm_params:
+      model: openai/groq/llama-3.3-70b-versatile
+      api_base: http://ai-gateway:8000/v1
+      api_key: "not-needed"
+    model_info:
+      mode: chat
+
+  - model_name: gateway/openrouter-free
+    litellm_params:
+      model: openai/openrouter/qwen/qwen-2.5-7b-instruct:free
+      api_base: http://ai-gateway:8000/v1
+      api_key: "not-needed"
+    model_info:
+      mode: chat
+
+  # ===========================================================================
+  # GROQ - Fallback gratuit, ultra-rapide (si GROQ_API_KEY défini)
+  # 14 400 req/jour - Parfait si le modèle local est trop lent
+  # ===========================================================================
+  - model_name: groq/llama-3.1-8b-instant
+    litellm_params:
+      model: groq/llama-3.1-8b-instant
+      api_key: os.environ/GROQ_API_KEY
+      rpm: 30
+      tpm: 14400
+
+  - model_name: groq/llama-3.3-70b-versatile
+    litellm_params:
+      model: groq/llama-3.3-70b-versatile
+      api_key: os.environ/GROQ_API_KEY
+      rpm: 30
+      tpm: 14400
+
+  - model_name: groq/deepseek-r1-distill-llama-70b
+    litellm_params:
+      model: groq/deepseek-r1-distill-llama-70b
+      api_key: os.environ/GROQ_API_KEY
+      rpm: 30
+
+  # ===========================================================================
+  # OPENROUTER - Modèles gratuits (si OPENROUTER_API_KEY défini)
+  # Inclut : Llama, Gemma, Qwen, Mistral en gratuit
+  # ===========================================================================
+  - model_name: openrouter/llama-3.2-3b
+    litellm_params:
+      model: openrouter/meta-llama/llama-3.2-3b-instruct:free
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  - model_name: openrouter/gemma-2-9b
+    litellm_params:
+      model: openrouter/google/gemma-2-9b-it:free
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  - model_name: openrouter/qwen-2.5-7b
+    litellm_params:
+      model: openrouter/qwen/qwen-2.5-7b-instruct:free
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  - model_name: openrouter/mistral-7b
+    litellm_params:
+      model: openrouter/mistralai/mistral-7b-instruct:free
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  # ===========================================================================
+  # HUGGING FACE - Serverless Inference (si HUGGINGFACE_API_KEY défini)
+  # ===========================================================================
+  - model_name: hf/qwen-2.5-coder
+    litellm_params:
+      model: huggingface/Qwen/Qwen2.5-Coder-32B-Instruct
+      api_key: os.environ/HUGGINGFACE_API_KEY
+
+  # ===========================================================================
+  # TOGETHER AI - $25 crédits gratuits (si TOGETHER_API_KEY défini)
+  # ===========================================================================
+  - model_name: together/llama-3-70b
+    litellm_params:
+      model: together_ai/meta-llama/Llama-3-70b-chat-hf
+      api_key: os.environ/TOGETHER_API_KEY
+
+# =============================================================================
+# ROUTER - Fallback automatique local → cloud
+# =============================================================================
+router_settings:
+  routing_strategy: simple-shuffle           # Plus léger que usage-based pour homeserver
+  num_retries: 2
+  retry_after: 3
+  timeout: 90
+
+  # Si llama.cpp local est trop lent/OOM → bascule sur Groq automatiquement
+  fallbacks:
+    - "local/default": ["groq/llama-3.1-8b-instant", "openrouter/llama-3.2-3b"]
+    - "local/chat":    ["groq/llama-3.3-70b-versatile", "openrouter/gemma-2-9b"]
+    - "local/code":    ["groq/deepseek-r1-distill-llama-70b", "hf/qwen-2.5-coder"]
+
+# =============================================================================
+# CACHE - Redis (même config mais TTL plus court pour garder la mémoire libre)
+# =============================================================================
+cache:
+  type: redis
+  host: redis
+  port: 6379
+  ttl: 1800          # 30 min (vs 1h en full - économise la RAM)
+  cache_responses: true
+  cache_params:
+    similarity_threshold: 0.85
+    supported_call_types: ["acompletion", "completion"]
+
+# =============================================================================
+# SETTINGS - Pas de Langfuse, logs minimaux
+# =============================================================================
+litellm_settings:
+  set_verbose: false
+  json_logs: false                           # Moins de logs = moins de CPU
+  drop_params: true
+  max_parallel_requests: 20                  # Réduit vs 100 en full
+  # Pas de success_callback/failure_callback → pas de Langfuse → -2.5GB RAM
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  ui_access_mode: all
+  health_check_interval: 600               # 10 min (vs 5 min) → moins de charge CPU
