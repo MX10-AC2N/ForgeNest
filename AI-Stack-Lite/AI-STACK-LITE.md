@@ -214,3 +214,25 @@ openssl rand -base64 32
 Variables à changer impérativement :
 - `LITELLM_MASTER_KEY`
 - `WEBUI_SECRET_KEY`
+
+
+---
+
+<!-- BILAN_START -->
+## ✅ Dernier déploiement Stack LITE — 2026-02-18 12:09 UTC
+
+**Workflow :** [22139047472](https://github.com/MX10-AC2N/ForgeNest/actions/runs/22139047472)
+**Modèle CI :** SmolLM2-135M-Instruct-Q4_K_M (80 MB)
+
+| Test | Statut |
+|------|--------|
+| Redis | ✅ |
+| llama.cpp health | ✅ |
+| llama.cpp inférence | ✅ |
+| AI Gateway health | ✅ |
+| AI Gateway /v1/models | ✅ |
+| AI Gateway inférence | ✅ |
+| LiteLLM → llama.cpp | ✅ |
+| Open WebUI | ✅ |
+
+<!-- BILAN_END -->
