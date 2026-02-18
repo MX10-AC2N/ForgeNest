@@ -213,3 +213,25 @@ gh workflow run test-interactivity.yml
 
 *Généré automatiquement par `.github/scripts/generate_bilan_workflow.py`*
 *[Voir tous les runs](https://github.com/MX10-AC2N/ForgeNest/actions)*
+
+
+---
+
+<!-- BILAN_DEPLOY_START -->
+## Dernier deploiement Lite (racine) -- 2026-02-18 20:11 UTC
+
+Workflow : [22155703393](https://github.com/MX10-AC2N/ForgeNest/actions/runs/22155703393)
+Compose  : docker-compose.lite.yaml
+Modele CI: SmolLM2-135M-Instruct-Q5_K_M (~80 MB)
+
+| Test | Statut |
+|------|--------|
+| Forgejo demarre | OK |
+| Woodpecker demarre | OK |
+| llama.cpp health | OK |
+| AI Gateway health | OK |
+| AI Gateway inference llama_cpp/local | OK |
+| LiteLLM -> llama.cpp | OK |
+| Open WebUI | OK |
+
+<!-- BILAN_DEPLOY_END -->
