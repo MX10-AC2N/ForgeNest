@@ -1,0 +1,38 @@
+# ==============================================================================
+# ForgeNest — Mode Lite
+# ==============================================================================
+# Forgejo + Woodpecker CI/CD  +  Stack IA Légère (llama.cpp)
+#
+# USAGE :
+#   cp .env.example .env
+#   cp AI-Stack-Lite/.env.lite.example AI-Stack-Lite/.env.lite
+#   nano .env && nano AI-Stack-Lite/.env.lite
+#   docker compose -f docker-compose.lite.yaml up -d
+#
+# Cible : ZimaBoard, NAS, Mini-PC N100 — RAM requise : ~4–6 GB
+# ==============================================================================
+
+include:
+  - path: Forgejo-Woodpecker_CI-Stack/docker-compose.yml
+    project_directory: Forgejo-Woodpecker_CI-Stack
+    env_file:
+      - .env
+
+  - path: AI-Stack-Lite/docker-compose.lite.yaml
+    project_directory: AI-Stack-Lite
+    env_file:
+      - AI-Stack-Lite/.env.lite
+
+# ==============================================================================
+# RÉSEAU BRIDGE PARTAGÉ
+# Permet la communication inter-stacks :
+#   Woodpecker → AI Gateway (pipelines avec IA)
+#   Woodpecker → LiteLLM   (code review automatique)
+# ==============================================================================
+networks:
+  forgenest-bridge:
+    name: forgenest-bridge
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
